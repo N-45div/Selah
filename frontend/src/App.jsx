@@ -4,16 +4,17 @@ import Header from './components/Header';
 import PreparePage from './pages/PreparePage';
 import ConsolePage from './pages/ConsolePage';
 import OutputPage from './pages/OutputPage';
+import StagePage from './pages/StagePage';
 import CloseoutPage from './pages/CloseoutPage';
 
 function AppLayout({ plan, setPlan, streamStatus, setStreamStatus }) {
   const location = useLocation();
-  const isOutputScreen = location.pathname === '/output';
+  const isDedicatedScreen = location.pathname === '/output' || location.pathname === '/stage';
 
   return (
     <>
-      {/* Hide header on the clean full-screen OBS output projection page */}
-      {!isOutputScreen && <Header currentPlan={plan} streamStatus={streamStatus} />}
+      {/* Hide header on dedicated full-screen OBS projection and stage monitor pages */}
+      {!isDedicatedScreen && <Header currentPlan={plan} streamStatus={streamStatus} />}
 
       <main>
         <Routes>
@@ -34,6 +35,10 @@ function AppLayout({ plan, setPlan, streamStatus, setStreamStatus }) {
           <Route
             path="/output"
             element={<OutputPage plan={plan} />}
+          />
+          <Route
+            path="/stage"
+            element={<StagePage plan={plan} />}
           />
           <Route
             path="/closeout"

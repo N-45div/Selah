@@ -40,6 +40,35 @@
   --radius-lg: 12px;
 }
 
+/* Studio Dark Mode for Dark Tech Booths */
+body.dark-mode {
+  --bg-paper: #121110;
+  --bg-card: #1c1b18;
+  --bg-subtle: #262420;
+  --bg-elevated: #2e2c26;
+  
+  --ink-primary: #f5f2eb;
+  --ink-secondary: #b8b2a5;
+  --ink-muted: #807a70;
+  --border-color: #38342c;
+  --border-focus: #4e8a66;
+  
+  --green-bg: #15291e;
+  --green-border: #235438;
+  --green-ink: #8ee0b1;
+  --green-accent: #4e8a66;
+  
+  --amber-bg: #2d2210;
+  --amber-border: #59421a;
+  --amber-ink: #f0c56e;
+  --amber-accent: #d4912a;
+  
+  --red-bg: #2d1411;
+  --red-border: #59231c;
+  --red-ink: #f08e84;
+  --red-accent: #c44d3b;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -662,3 +691,117 @@ body {
   background: var(--bg-subtle);
   border-color: var(--green-accent);
 }
+
+/* Emergency Panic Bar */
+.emergency-bar {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.emergency-actions {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.btn-panic {
+  background: var(--red-bg);
+  color: var(--red-accent);
+  border: 1px solid var(--red-border);
+  font-size: 0.82rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.btn-panic:hover, .btn-panic.active {
+  background: var(--red-accent);
+  color: #ffffff;
+}
+
+.btn-safe {
+  background: var(--amber-bg);
+  color: var(--amber-ink);
+  border: 1px solid var(--amber-border);
+  font-size: 0.82rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.btn-safe:hover, .btn-safe.active {
+  background: var(--amber-accent);
+  color: #ffffff;
+}
+
+/* Live Telemetry Progress */
+.telemetry-progress-container {
+  margin: 0.75rem 0;
+}
+
+.progress-track {
+  height: 6px;
+  background: var(--bg-subtle);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--green-accent);
+  transition: width 0.25s ease;
+}
+
+/* Thought Trace Box */
+.thought-trace {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 0.65rem 0.85rem;
+  margin-top: 0.75rem;
+  font-size: 0.82rem;
+  color: var(--ink-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  animation: pulse 2s infinite;
+}
+
+/* Dark Mode Theme Toggle Button */
+.theme-toggle-btn {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  color: var(--ink-primary);
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  transition: all 0.15s ease;
+}
+
+.theme-toggle-btn:hover {
+  background: var(--bg-card);
+  border-color: var(--ink-muted);
+}
+

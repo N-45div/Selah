@@ -1,10 +1,25 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { Radio, ShieldCheck, Tv, FileText, ExternalLink } from 'lucide-react';
+import { Radio, ShieldCheck, Tv, FileText, ExternalLink, Moon, Sun, Monitor } from 'lucide-react';
 
 export default function Header({ currentPlan, streamStatus }) {
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
   const isLive = streamStatus === 'live' || (currentPlan && currentPlan.status === 'live');
   const isEnded = streamStatus === 'ended' || (currentPlan && currentPlan.status === 'ended');
+
+  // Toggle Dark Studio Mode
+  const toggleTheme = () => {
+    setIsDarkMode((prev) => {
+      const nextVal = !prev;
+      if (nextVal) {
+        document.body.classList.add('dark-mode');
+      } else {
+        document.body.classList.remove('dark-mode');
+      }
+      return nextVal;
+    });
+  };
 
   return (
     <header className="app-header">
@@ -40,12 +55,33 @@ export default function Header({ currentPlan, streamStatus }) {
           title="Open OBS / vMix Output Window"
         >
           <Tv size={17} />
-          <span>OBS Screen</span>
+          <span>OBS Output</span>
+          <ExternalLink size={13} style={{ opacity: 0.7 }} />
+        </a>
+
+        <a 
+          href="/stage" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="nav-link"
+          title="Open Stage Confidence Monitor"
+        >
+          <Monitor size={17} color="var(--amber-accent)" />
+          <span>Stage Monitor</span>
           <ExternalLink size={13} style={{ opacity: 0.7 }} />
         </a>
       </nav>
 
       <div className="header-status">
+        <button
+          type="button"
+          className="theme-toggle-btn"
+          onClick={toggleTheme}
+          title="Toggle Studio Dark Booth Mode"
+        >
+          {isDarkMode ? <><Sun size={14} color="#f0c56e" /> Paper</> : <><Moon size={14} /> Studio Dark</>}
+        </button>
+
         {isLive ? (
           <span className="status-badge status-live">
             <span className="pulse-dot"></span>

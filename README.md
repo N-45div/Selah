@@ -106,10 +106,15 @@ Selah is built for the **Google Cloud "Agentic Cinema" Hackathon (Parallel Partn
 - **Go-Live Guard**: Blocks broadcast until the operator selects an operational resolution for any red-verdict song.
 - **Diaspora Transliteration**: Generates Latin phonetic lines under Indic script lyrics (Tamil, Malayalam, Telugu, Hindi) for diaspora youth.
 
-### Act 2: Broadcast (Operator Console & OBS Output)
-- **Volunteer Operator Console** (`/console`): Clean, warm paper aesthetic (`#faf8f4`), big tactile buttons, keyboard shortcuts (`Space` / `→` / `←`).
+### Act 2: Broadcast (Operator Console, Stage Monitor & OBS Lower Thirds)
+- **Volunteer Operator Console** (`/console`): Clean, dual-theme (Warm Paper `#faf8f4` & Studio Dark Mode `#121110`), big tactile buttons, USB foot pedal & hotkey navigation (`Space` / `→` / `←` / `PageDown`).
+- **Emergency Panic Controls Bar**: Instant `[Esc]` screen blackout, `[M]` stream audio safe mode toggle, and live service progress track.
 - **OBS / vMix Output Screen** (`/output`): Clean dark presentation view, massive serif text, synced locally via `BroadcastChannel` with zero latency.
+- **Transparent Lower Thirds Mode** (`/output?mode=lower-third`): Dedicated alpha-transparent browser overlay for OBS and vMix with animated 2-line lyric banners.
+- **Stage Confidence Monitor** (`/stage`): High-contrast prompter for vocalists and pastors showing live clock, current lyrics, and upcoming next lines.
+- **ProPresenter 7 Export**: 1-click export of structured `.json` bundle for church presentation software.
 - **Live Chapter Marking**: One-click timestamps for "Welcome", "Worship", "Prayer", "Sermon", "Benediction".
+
 
 ### Act 3: Close Out (Compliance & Dispute Kit)
 - **YouTube Description**: Pre-formatted with mandatory CCLI license attributions.

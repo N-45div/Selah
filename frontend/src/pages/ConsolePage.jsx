@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Radio, Play, Square, ChevronLeft, ChevronRight, Bookmark, 
-  Tv, ExternalLink, Clock, Layers, AlertCircle, CheckCircle 
+  Tv, ExternalLink, Clock, Layers, AlertCircle, CheckCircle, 
+  EyeOff, VolumeX, Download, Monitor, Sliders, ShieldAlert 
 } from 'lucide-react';
 
 const COMMON_CHAPTERS = [
@@ -23,8 +24,10 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
   const [customChapterLabel, setCustomChapterLabel] = useState('');
   const [isGoingLive, setIsGoingLive] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
+  const [isBlackout, setIsBlackout] = useState(false);
+  const [isAudioMutedSafe, setIsAudioMutedSafe] = useState(false);
 
-  // Flatten all slides across songs
+  // Flatten all slides
   const allSlides = useMemo(() => {
     const flattened = [];
     if (!plan?.songs) return flattened;
@@ -35,10 +38,13 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
             ...slide,
             song_title: song.title,
             song_language: song.language,
+            is_blocking:
+              (song.verdict?.legal_status === 'needs_license' ||
+                song.verdict?.legal_status === 'unknown') &&
+              !song.resolution,
           });
         });
       } else {
-        // Fallback placeholder slide
         flattened.push({
           song_index: song.index,
           label: 'Title Slide',
@@ -46,6 +52,7 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
           transliteration: [],
           song_title: song.title,
           song_language: song.language,
+          is_blocking: false,
         });
       }
     });
@@ -55,7 +62,7 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
   const currentSlide = allSlides[currentSlideIndex] || null;
   const nextSlide = allSlides[currentSlideIndex + 1] || null;
 
-  // BroadcastChannel for instant local syncing to /output screen
+  // BroadcastChannel for instant local syncing to /output and /stage
   const broadcastChannel = useMemo(() => {
     try {
       return new BroadcastChannel('selah_stream');
@@ -73,6 +80,7 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
           slideIndex: index,
           totalSlides: allSlides.length,
           slide: allSlides[index],
+          nextSlide: allSlides[index + 1] || null,
         });
       }
     },
@@ -119,24 +127,48 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
     [allSlides.length, plan?.id, syncSlideToOutput]
   );
 
-  // Keyboard navigation shortcuts
+  // Blackout Toggle Handler
+  const toggleBlackout = useCallback(() => {
+    setIsBlackout((prev) => {
+      const nextVal = !prev;
+      if (broadcastChannel) {
+        broadcastChannel.postMessage({
+          type: 'BLACKOUT_TOGGLE',
+          isBlackout: nextVal,
+        });
+      }
+      return nextVal;
+    });
+  }, [broadcastChannel]);
+
+  // Audio Safe Mute Indicator Toggle
+  const toggleAudioSafeMute = useCallback(() => {
+    setIsAudioMutedSafe((prev) => !prev);
+  }, []);
+
+  // Keyboard navigation shortcuts & USB Foot Pedal support
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Don't trigger if typing in an input
       if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
 
-      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown' || e.key === 'Enter') {
         e.preventDefault();
         handleGoToSlide(currentSlideIndex + 1);
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'Backspace') {
         e.preventDefault();
         handleGoToSlide(currentSlideIndex - 1);
+      } else if (e.key === 'Escape' || e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        toggleBlackout();
+      } else if (e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        toggleAudioSafeMute();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentSlideIndex, handleGoToSlide]);
+  }, [currentSlideIndex, handleGoToSlide, toggleBlackout, toggleAudioSafeMute]);
 
   // Go Live
   const handleGoLive = async () => {
@@ -147,7 +179,6 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
         method: 'POST',
       });
       if (res.ok) {
-        const data = await res.json();
         setStreamStatus('live');
         const planRes = await fetch(`/api/plan/${plan.id}`);
         const planData = await planRes.json();
@@ -206,6 +237,29 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
     }
   };
 
+  // Export Slide Deck as ProPresenter JSON
+  const handleExportProPresenter = () => {
+    if (!plan) return;
+    const proBundle = {
+      format: 'ProPresenter_7_Bundle',
+      service_name: plan.service_name,
+      stream_title: plan.stream_title,
+      exported_at: new Date().toISOString(),
+      songs: plan.songs.map((s) => ({
+        title: s.title,
+        artist: s.artist_or_source,
+        ccli_number: s.verdict?.ccli_number || '',
+        slides: s.slides,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(proBundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Selah_${plan.service_name.replace(/\s+/g, '_')}_Pro7.json`;
+    a.click();
+  };
+
   const formatTimer = (totalSeconds) => {
     const hrs = Math.floor(totalSeconds / 3600);
     const mins = Math.floor((totalSeconds % 3600) / 60);
@@ -225,8 +279,40 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
         !s.resolution
     ).length || 0;
 
+  const progressPercent = allSlides.length > 0 ? Math.round(((currentSlideIndex + 1) / allSlides.length) * 100) : 0;
+
   return (
     <div className="main-container">
+      {/* Emergency Control Bar */}
+      <div className="emergency-bar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <Sliders size={18} color="var(--ink-secondary)" />
+          <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>Emergency Control HUD</span>
+        </div>
+
+        <div className="emergency-actions">
+          <button
+            type="button"
+            className={`btn-panic ${isBlackout ? 'active' : ''}`}
+            onClick={toggleBlackout}
+            title="Black out projection output screen (Esc / B)"
+          >
+            <EyeOff size={15} />
+            <span>{isBlackout ? 'Screen Blacked Out (Esc)' : 'Blackout Screen (Esc)'}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`btn-safe ${isAudioMutedSafe ? 'active' : ''}`}
+            onClick={toggleAudioSafeMute}
+            title="Toggle Stream Audio Safe Mode (M)"
+          >
+            <VolumeX size={15} />
+            <span>{isAudioMutedSafe ? 'Stream Audio Muted (M)' : 'Mute Stream Audio (M)'}</span>
+          </button>
+        </div>
+      </div>
+
       {/* Top Telecast Banner */}
       <div className="card" style={{ padding: '1.25rem 1.75rem', marginBottom: '1.25rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
@@ -242,7 +328,7 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             {isLive ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--red-bg)', padding: '0.4rem 0.9rem', borderRadius: '999px', border: '1px solid var(--red-border)' }}>
                 <Clock size={16} color="var(--red-accent)" />
@@ -270,8 +356,32 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
               title="Open OBS projection screen in dedicated window"
             >
               <Tv size={16} />
-              <span>Open OBS Screen</span>
-              <ExternalLink size={13} />
+              <span>OBS Fullscreen</span>
+              <ExternalLink size={12} />
+            </a>
+
+            <a
+              href="/output?mode=lower-third"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary"
+              title="Open OBS transparent lower-third overlay"
+            >
+              <Monitor size={16} />
+              <span>Lower Third</span>
+              <ExternalLink size={12} />
+            </a>
+
+            <a
+              href="/stage"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary"
+              title="Open Stage Confidence Monitor for vocalists"
+            >
+              <Monitor size={16} color="var(--amber-accent)" />
+              <span>Stage Monitor</span>
+              <ExternalLink size={12} />
             </a>
 
             {isLive && (
@@ -288,12 +398,21 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
           </div>
         </div>
 
-        {blockingCount > 0 && !isLive && (
-          <div style={{ marginTop: '0.85rem', padding: '0.6rem 0.85rem', background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', color: 'var(--red-ink)', fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <AlertCircle size={16} />
-            <span>
-              Go-Live Guard active: {blockingCount} song(s) require licensing resolution in Step 1 before broadcasting.
-            </span>
+        {/* Telemetry Progress Bar */}
+        <div className="telemetry-progress-container">
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--ink-muted)', marginBottom: '0.3rem' }}>
+            <span>Slide {currentSlideIndex + 1} of {allSlides.length || 1}</span>
+            <span>{progressPercent}% Service Progress</span>
+          </div>
+          <div className="progress-track">
+            <div className="progress-fill" style={{ width: `${progressPercent}%` }}></div>
+          </div>
+        </div>
+
+        {isAudioMutedSafe && (
+          <div style={{ marginTop: '0.65rem', padding: '0.5rem 0.8rem', background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', color: 'var(--amber-ink)', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <ShieldAlert size={16} />
+            <span><strong>Audio Safe Mode Enabled:</strong> Stream audio is designated muted for copyright protection.</span>
           </div>
         )}
       </div>
@@ -302,7 +421,7 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
       <div className="live-dashboard">
         {/* Left Column: Live Slide Output & Navigation */}
         <div>
-          <div className="slide-viewer">
+          <div className="slide-viewer" style={{ opacity: isBlackout ? 0.3 : 1 }}>
             <span className="slide-section-label">
               {currentSlide?.song_title} • {currentSlide?.label || 'Slide'} ({currentSlideIndex + 1} / {allSlides.length || 1})
             </span>
@@ -340,7 +459,7 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
               disabled={currentSlideIndex <= 0}
             >
               <ChevronLeft size={22} />
-              <span>Previous Slide (←)</span>
+              <span>Previous Slide (← / PageUp)</span>
             </button>
 
             <button
@@ -350,7 +469,7 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
               onClick={() => handleGoToSlide(currentSlideIndex + 1)}
               disabled={currentSlideIndex >= allSlides.length - 1}
             >
-              <span>Next Slide (Space / →)</span>
+              <span>Next Slide (Space / → / Pedal)</span>
               <ChevronRight size={22} />
             </button>
           </div>
@@ -423,7 +542,7 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
                 Recorded Chapters ({plan?.chapters?.length || 0}):
               </div>
 
-              <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
+              <div style={{ maxHeight: '160px', overflowY: 'auto' }}>
                 {plan?.chapters?.length > 0 ? (
                   plan.chapters.map((ch, idx) => (
                     <div
@@ -443,16 +562,29 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
             </div>
           </div>
 
-          {/* Volunteer Cheatsheet Card */}
+          {/* Presentation Software Export & Cheatsheet */}
           <div className="card" style={{ background: 'var(--bg-subtle)' }}>
             <h4 style={{ fontFamily: 'var(--font-serif)', fontSize: '1rem', fontWeight: 600, marginBottom: '0.4rem' }}>
-              Keyboard Shortcuts for Media Volunteers
+              Broadcast Booth & Hardware Shortcuts
             </h4>
             <ul style={{ fontSize: '0.82rem', color: 'var(--ink-secondary)', paddingLeft: '1.2rem', lineHeight: '1.6' }}>
-              <li><strong>Spacebar / Right Arrow (→):</strong> Advance to next slide</li>
-              <li><strong>Left Arrow (←):</strong> Return to previous slide</li>
-              <li><strong>OBS Window:</strong> Keep <code>/output</code> open on second display</li>
+              <li><strong>Space / → / USB Foot Pedal:</strong> Advance slide</li>
+              <li><strong>← / PageUp:</strong> Return to previous slide</li>
+              <li><strong>Esc / B:</strong> Instant screen blackout</li>
+              <li><strong>M:</strong> Toggle audio safe mute indicator</li>
             </ul>
+
+            <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ width: '100%', fontSize: '0.82rem' }}
+                onClick={handleExportProPresenter}
+              >
+                <Download size={14} />
+                <span>Export ProPresenter 7 Bundle (.json)</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

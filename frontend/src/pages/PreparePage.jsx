@@ -399,8 +399,16 @@ export default function PreparePage({ plan, setPlan }) {
                     </div>
 
                     {isPending ? (
-                      <div style={{ padding: '0.75rem 0', color: 'var(--ink-muted)', fontSize: '0.85rem' }}>
-                        Parallel Search is investigating CCLI catalog, publishing administration, and YouTube strike risk...
+                      <div style={{ padding: '0.75rem 0' }}>
+                        <div style={{ color: 'var(--ink-muted)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                          Autonomous agent is investigating publishing rights, CCLI catalog, and YouTube strike risk...
+                        </div>
+                        <div className="thought-trace">
+                          <RefreshCw size={13} className="spin" color="var(--green-accent)" />
+                          <span>
+                            <strong>Parallel Search:</strong> Querying CCLI SongSelect & YouTube Content ID knowledge base...
+                          </span>
+                        </div>
                       </div>
                     ) : isError ? (
                       <div style={{ color: 'var(--red-accent)', fontSize: '0.85rem' }}>

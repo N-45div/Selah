@@ -1,16 +1,23 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 export default function OutputPage() {
+  const [searchParams] = useSearchParams();
+  const isLowerThird = searchParams.get('mode') === 'lower-third';
+
   const [currentSlide, setCurrentSlide] = useState(null);
   const [songInfo, setSongInfo] = useState('');
+  const [isBlackout, setIsBlackout] = useState(false);
 
-  // 1. Listen for instant BroadcastChannel events from the console tab
+  // BroadcastChannel listener
   useEffect(() => {
     let bc;
     try {
       bc = new BroadcastChannel('selah_stream');
       bc.onmessage = (event) => {
-        if (event.data?.type === 'SLIDE_CHANGE' && event.data.slide) {
+        if (event.data?.type === 'BLACKOUT_TOGGLE') {
+          setIsBlackout(event.data.isBlackout);
+        } else if (event.data?.type === 'SLIDE_CHANGE' && event.data.slide) {
           setCurrentSlide(event.data.slide);
           setSongInfo(`${event.data.slide.song_title || ''} • ${event.data.slide.label || ''}`);
         }
@@ -24,6 +31,94 @@ export default function OutputPage() {
     };
   }, []);
 
+  if (isBlackout) {
+    return isLowerThird ? null : (
+      <div style={{ backgroundColor: '#000000', width: '100vw', height: '100vh' }} />
+    );
+  }
+
+  // --- 1. OBS / vMix Transparent Lower-Third Overlay Mode ---
+  if (isLowerThird) {
+    return (
+      <div
+        style={{
+          backgroundColor: 'transparent',
+          width: '100vw',
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'flex-end',
+          padding: '0 5vw 4vh',
+          boxSizing: 'border-box',
+          overflow: 'hidden',
+          userSelect: 'none',
+        }}
+      >
+        {currentSlide && (
+          <div
+            style={{
+              background: 'linear-gradient(180deg, rgba(20, 19, 17, 0.88) 0%, rgba(10, 10, 9, 0.96) 100%)',
+              borderLeft: '6px solid #4e8a66',
+              borderTop: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '12px',
+              padding: '1.5vw 2.5vw',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
+              backdropFilter: 'blur(8px)',
+              animation: 'fadeIn 0.25s ease-out',
+            }}
+          >
+            {/* Song title badge */}
+            <div
+              style={{
+                fontSize: '0.9vw',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: '#d4912a',
+                fontWeight: 700,
+                marginBottom: '0.4vw',
+                fontFamily: 'Inter, sans-serif',
+              }}
+            >
+              {songInfo}
+            </div>
+
+            {/* Lyric lines */}
+            <div
+              style={{
+                fontFamily: '"Lora", "Georgia", serif',
+                fontSize: '2.4vw',
+                lineHeight: 1.35,
+                fontWeight: 600,
+                color: '#ffffff',
+                textShadow: '0 2px 8px rgba(0,0,0,0.8)',
+              }}
+            >
+              {currentSlide.lines?.slice(0, 2).map((line, idx) => (
+                <div key={idx}>{line}</div>
+              ))}
+            </div>
+
+            {/* Transliteration */}
+            {currentSlide.transliteration?.length > 0 && (
+              <div
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontSize: '1.4vw',
+                  color: '#f0c56e',
+                  fontStyle: 'italic',
+                  marginTop: '0.4vw',
+                }}
+              >
+                {currentSlide.transliteration.slice(0, 2).join(' ')}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // --- 2. Fullscreen Church Projection Mode ---
   return (
     <div
       style={{
@@ -44,7 +139,6 @@ export default function OutputPage() {
         userSelect: 'none',
       }}
     >
-      {/* Discreet Section Label in top corner */}
       {songInfo && (
         <div
           style={{
@@ -63,7 +157,6 @@ export default function OutputPage() {
         </div>
       )}
 
-      {/* Main Lyric Display */}
       {currentSlide ? (
         <div style={{ maxWidth: '90vw' }}>
           <div
@@ -78,13 +171,10 @@ export default function OutputPage() {
             }}
           >
             {currentSlide.lines?.map((line, idx) => (
-              <div key={idx} style={{ margin: '0.4vw 0' }}>
-                {line}
-              </div>
+              <div key={idx} style={{ margin: '0.4vw 0' }}>{line}</div>
             ))}
           </div>
 
-          {/* Transliteration line in gold/sand */}
           {currentSlide.transliteration?.length > 0 && (
             <div
               style={{
@@ -98,9 +188,7 @@ export default function OutputPage() {
               }}
             >
               {currentSlide.transliteration.map((tLine, idx) => (
-                <div key={idx} style={{ margin: '0.3vw 0' }}>
-                  {tLine}
-                </div>
+                <div key={idx} style={{ margin: '0.3vw 0' }}>{tLine}</div>
               ))}
             </div>
           )}

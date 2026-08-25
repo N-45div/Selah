@@ -1,7 +1,9 @@
 import uuid
+import json
 import asyncio
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi.responses import StreamingResponse, Response
 from ..models import (
     ServicePlan, Song, SongVerdict, ResolveRequest, PlanCreateRequest
 )
@@ -11,6 +13,7 @@ from ..agents.setlist_agent import (
 )
 from ..agents.licensing_agent import research_song
 from ..agents.pack_agent import generate_pack_for_setlist
+from ..services.pptx_exporter import generate_pptx_deck
 
 router = APIRouter(prefix="/api/plan", tags=["Plan"])
 
@@ -207,3 +210,101 @@ async def build_slides(plan_id: str):
         "total_slides": total_slides,
         "songs": [s.model_dump() for s in plan.songs]
     }
+
+
+# ---------- Server-Sent Events (SSE) Live Research Telemetry ----------
+
+@router.get("/{plan_id}/stream")
+async def stream_plan_telemetry(plan_id: str):
+    """
+    Server-Sent Events (SSE) endpoint for real-time research telemetry.
+    Replaces frontend 1.5s HTTP polling with a persistent event stream that pushes
+    progressive song verdicts, research status changes, and plan readiness events.
+    """
+    async def event_generator():
+        max_ticks = 300  # Safety cap: ~5 minutes max stream
+        for _ in range(max_ticks):
+            plan = await get_plan(plan_id)
+            if not plan:
+                yield f"event: error\ndata: {json.dumps({'error': 'Plan not found'})}\n\n"
+                break
+
+            # Build per-song status payload
+            songs_payload = []
+            for s in plan.songs:
+                song_data = {
+                    "index": s.index,
+                    "title": s.title,
+                    "artist_or_source": s.artist_or_source,
+                    "research_status": s.research_status,
+                    "error_message": s.error_message,
+                    "resolution": s.resolution
+                }
+                if s.verdict:
+                    song_data["verdict"] = {
+                        "legal_status": s.verdict.legal_status.value,
+                        "legal_summary": s.verdict.legal_summary,
+                        "content_id_risk": s.verdict.content_id_risk.value,
+                        "content_id_summary": s.verdict.content_id_summary,
+                        "owner": s.verdict.owner,
+                        "ccli_number": s.verdict.ccli_number,
+                        "sources": [src.model_dump() for src in s.verdict.sources]
+                    }
+                songs_payload.append(song_data)
+
+            blocking_indices = [s.index for s in plan.blocking_songs]
+            all_done = all(s.research_status in ("done", "error") for s in plan.songs)
+            is_ready = len(plan.blocking_songs) == 0 and all_done
+
+            data_payload = {
+                "id": plan.id,
+                "status": plan.status,
+                "songs": songs_payload,
+                "blocking_count": len(plan.blocking_songs),
+                "blocking_indices": blocking_indices,
+                "is_ready_for_broadcast": is_ready
+            }
+
+            yield f"event: plan_update\ndata: {json.dumps(data_payload)}\n\n"
+
+            # Stream completion: all songs researched and plan is not live
+            if all_done and plan.status != "live":
+                yield f"event: research_complete\ndata: {json.dumps({'plan_id': plan.id, 'is_ready': is_ready})}\n\n"
+                break
+
+            await asyncio.sleep(1.0)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+# ---------- PowerPoint 16:9 Slide Deck Export ----------
+
+@router.get("/{plan_id}/export/pptx")
+async def export_pptx(plan_id: str):
+    """
+    Generates and downloads a 16:9 widescreen PowerPoint slide deck
+    with dark broadcast styling, verse/chorus splits, and transliteration.
+    """
+    plan = await get_plan(plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found.")
+
+    pptx_buffer = generate_pptx_deck(plan)
+    filename = f"selah_slides_{plan_id}.pptx"
+
+    return Response(
+        content=pptx_buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
+

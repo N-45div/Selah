@@ -47,3 +47,7 @@ frontend/dist/
 Thumbs.db
 *.log
 
+# Internal Dossiers
+SELAH_MASTER_RESEARCH_AND_CODE_REVIEW.md
+
+

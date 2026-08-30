@@ -105,25 +105,39 @@ async def research_song(
     Output STRICT JSON matching the SongVerdict schema.
     """
 
-    runner = InMemoryRunner(agent=agent)
     final_text = ""
+    max_retries = 3
 
-    try:
-        # Run ADK agent asynchronously
-        events = await runner.run_debug(request_prompt, quiet=True)
-        
-        # Extract the final text from the last event containing content parts
-        for event in reversed(events):
-            if hasattr(event, "content") and event.content:
-                parts = getattr(event.content, "parts", [])
-                for part in parts:
-                    if hasattr(part, "text") and part.text:
-                        final_text = part.text
-                        break
+    for attempt in range(max_retries):
+        runner = InMemoryRunner(agent=agent)
+        try:
+            events = await runner.run_debug(request_prompt, quiet=True)
+            for event in reversed(events):
+                if hasattr(event, "content") and event.content:
+                    parts = getattr(event.content, "parts", [])
+                    for part in parts:
+                        if hasattr(part, "text") and part.text:
+                            final_text = part.text
+                            break
+                if final_text:
+                    break
             if final_text:
                 break
-    finally:
-        await runner.close()
+        except Exception as e:
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                wait_time = 15.0 * (attempt + 1)
+                print(f"[ADK 429 Rate Limit] Backing off for {wait_time}s on '{title}'...")
+                await asyncio.sleep(wait_time)
+            else:
+                if attempt == max_retries - 1:
+                    print(f"ADK runner error on '{title}': {e}")
+                await asyncio.sleep(3.0)
+        finally:
+            try:
+                await runner.close()
+            except Exception:
+                pass
+
 
     # Attempt to parse JSON
     cleaned = _clean_json_text(final_text)

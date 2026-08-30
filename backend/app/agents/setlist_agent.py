@@ -63,11 +63,35 @@ async def parse_setlist_text(text: str) -> ExtractedSetlist:
     Parses raw pasted text / WhatsApp message into structured setlist with medley decomposition.
     """
     prompt = f"Please extract all worship songs and hymns from this setlist text. Decompose any compound medleys into individual songs:\n\n{text}"
-    result = await generate_structured(
-        prompt=prompt,
-        schema=ExtractedSetlist,
-        system_instruction=SETLIST_SYSTEM_INSTRUCTION
-    )
+    try:
+        result = await generate_structured(
+            prompt=prompt,
+            schema=ExtractedSetlist,
+            system_instruction=SETLIST_SYSTEM_INSTRUCTION
+        )
+    except Exception as parse_err:
+        print(f"LLM parse notice: {parse_err}. Using deterministic line parser fallback...")
+        # High-res deterministic regex fallback for lines like "1. In Christ Alone - Keith Getty"
+        fallback_items: List[ExtractedSongItem] = []
+        for raw_line in text.strip().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # Strip leading numbering like "1.", "1)", "- ", "* "
+            cleaned_line = re.sub(r"^(\d+[\.\)\-:]|\-|\*|\•)\s*", "", line).strip()
+            if not cleaned_line:
+                continue
+            # Split title and artist if separated by '-' or 'by'
+            if " - " in cleaned_line:
+                t, a = cleaned_line.split(" - ", 1)
+                fallback_items.append(ExtractedSongItem(title=t.strip(), artist_or_source=a.strip(), language="English"))
+            elif " by " in cleaned_line.lower():
+                idx = cleaned_line.lower().find(" by ")
+                t, a = cleaned_line[:idx], cleaned_line[idx+4:]
+                fallback_items.append(ExtractedSongItem(title=t.strip(), artist_or_source=a.strip(), language="English"))
+            else:
+                fallback_items.append(ExtractedSongItem(title=cleaned_line, artist_or_source="", language="English"))
+        result = ExtractedSetlist(service_name="Sunday Worship Service", songs=fallback_items)
 
     # Post-process fallback for any un-split medley delimiters
     expanded_songs: List[ExtractedSongItem] = []
@@ -79,6 +103,7 @@ async def parse_setlist_text(text: str) -> ExtractedSetlist:
 
     result.songs = expanded_songs
     return result
+
 
 
 async def parse_setlist_image(image_bytes: bytes, mime_type: str = "image/jpeg") -> ExtractedSetlist:

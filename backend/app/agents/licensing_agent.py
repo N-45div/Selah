@@ -1,74 +1,46 @@
 import json
 import re
 import asyncio
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any, Optional
 from google.adk import Agent
 from google.adk.runners import InMemoryRunner
-from ..config import GEMINI_MODEL
 from ..models import SongVerdict, LegalStatus, ContentIdRisk, Source
-from ..services.parallel_client import search_licensing_web
+from ..services.parallel_client import search_licensing_web, async_research_licensing_deep
 from ..services.gemini_client import generate_structured
+from ..config import GEMINI_MODEL
 
 
 LICENSING_AGENT_INSTRUCTION = """
-You are Selah's Music Licensing & Copyright Research Agent for live church broadcasts.
-Your mission is to perform thorough, evidence-based copyright and YouTube Content ID risk research on worship songs and hymns.
+You are Selah's Autonomous Licensing & Broadcast Rights Research Agent.
+Your mission is to perform deep musicological and legal research for worship songs and hymns to protect live church telecasts from audio muting, copyright strikes, and statutory penalties.
 
-YOUR RESEARCH TOOL:
-You have access to `search_licensing_web(objective: str, search_queries: list[str])`.
-All web research is powered by Parallel Search. Always provide 1-3 targeted 3-6 word search queries per search step.
-
-DOMAIN RULES & GOTCHAS (CRITICAL):
-1. PUBLIC DOMAIN VS MODERN ARRANGEMENTS:
-   - Traditional hymn text (e.g. John Newton's "Amazing Grace", Horatio Spafford's "It Is Well") is Public Domain.
-   - BUT modern arrangements, added refrains, or contemporary retunes (e.g., Chris Tomlin's "Amazing Grace (My Chains Are Gone)") are fully copyrighted!
-   - Modern hymns written after 1930 (e.g., Keith Getty & Stuart Townend's "In Christ Alone") are fully copyrighted by publishers like Thankyou Music / Capitol CMG.
-
-2. CCLI LICENSING TIERS:
-   - Check if the song is in the CCLI SongSelect catalog and locate its exact CCLI song number.
-   - The basic "CCLI Copyright License" covers in-person projection/reproduction ONLY — it DOES NOT cover streaming/broadcasting!
-   - Streaming requires the "CCLI Streaming License" or "CCLI Streaming Plus License" (for multitracks/master recordings) or OneLicense (for specific liturgical publishers).
-   - Evaluate `legal_status` as `covered` ONLY if the church's provided `licenses_held` covers online streaming for this song. If the church only holds a basic in-person license, mark `needs_license`.
-
-3. YOUTUBE CONTENT ID AXIS:
-   - YouTube Content ID operates independently of church licensing. A church can hold all CCLI licenses and STILL receive an automated Content ID mute or copyright claim!
-   - Commercial worship tracks (e.g., Elevation Worship, Hillsong, Bethel) or popular melodies have high Content ID risk.
-   - Traditional hymns in public domain have medium risk (due to algorithms matching recorded performances).
-   - Always provide clear dispute advice in `content_id_summary` (e.g. "Church holds streaming rights; dispute claim citing CCLI # / PD status").
-
-4. HUMAN ACTION OPTIONS (NEVER SUBSTITUTE SONGS):
-   - You MUST NEVER suggest alternative songs or replacement hymns.
-   - The options list must provide practical operational choices for the church team (e.g., "Mute livestream audio during this song", "Confirm CCLI Streaming License tier", "Display CCLI copyright notice", "File YouTube Content ID dispute if flagged").
-
-OUTPUT FORMAT:
-Your final answer MUST be valid JSON (and ONLY JSON) matching this exact schema:
-{
-  "legal_status": "public_domain" | "covered" | "needs_license" | "unknown",
-  "legal_summary": "2-3 plain sentences explaining the legal status to a church volunteer.",
-  "content_id_risk": "low" | "medium" | "high",
-  "content_id_summary": "Explanation of YouTube Content ID claim likelihood and clear dispute guidance.",
-  "owner": "Copyright owner/publisher (e.g. Thankyou Music / Capitol CMG / Public Domain)",
-  "ccli_number": "CCLI song number (e.g. 3350395) or null",
-  "options": ["Option 1", "Option 2"],
-  "sources": [
-    {
-      "url": "https://...",
-      "title": "Page Title",
-      "note": "One sentence explaining what this source proves"
-    }
-  ],
-  "attribution_line": "Ready-to-paste attribution for video description (e.g. In Christ Alone - Keith Getty, Stuart Townend © 2001 Thankyou Music / CCLI #3350395)"
-}
+CRITICAL OPERATIONAL RULES:
+1. NEVER suggest, recommend, or substitute songs. Selah never dictates worship choices. It gives the human operator clear operational choices (e.g., mute livestream audio, verify CCLI Streaming coverage, obtain synchronization license).
+2. For every song, determine:
+   - `legal_status`:
+     * 'public_domain': Written before 1929 or authentic historic traditional hymn.
+     * 'covered': Covered by the church's declared licenses (e.g. CCLI Streaming License).
+     * 'needs_license': Copyrighted and NOT covered by in-person-only or basic licenses without streaming addon.
+     * 'unknown': Unable to confirm ownership with high confidence.
+   - `ccli_number`: Look up the exact CCLI SongSelect ID (e.g., 3350395 for 'In Christ Alone', 7115744 for 'Way Maker').
+   - `content_id_risk`: 'low' (public domain), 'medium' (covered with attribution required), or 'high' (strictly claimed by major labels like Capitol CMG / Sony / Bethel Music).
+   - `options`: 2-4 concrete actions for the human volunteer (e.g. 'Mute stream audio during song', 'Acquire CCLI Streaming Plus License for multitracks', 'Verify arrangement year').
+   - `sources`: Provide verifiable primary sources (CCLI SongSelect, Hymnary.org, Capitol CMG, Easy Song, etc.) with URL and title.
+   - `attribution_line`: A clean, ready-to-paste video description attribution string.
 """
 
 
 def _clean_json_text(text: str) -> str:
-    """Strip markdown code fences and extraneous leading/trailing text."""
-    text = text.strip()
-    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
-    if match:
-        return match.group(1).strip()
-    return text
+    cleaned = text.strip()
+    if "```json" in cleaned:
+        match = re.search(r"```json\s*(.*?)\s*```", cleaned, re.DOTALL)
+        if match:
+            cleaned = match.group(1)
+    elif "```" in cleaned:
+        match = re.search(r"```\s*(.*?)\s*```", cleaned, re.DOTALL)
+        if match:
+            cleaned = match.group(1)
+    return cleaned.strip()
 
 
 async def research_song(
@@ -78,13 +50,13 @@ async def research_song(
     language: str = "English"
 ) -> SongVerdict:
     """
-    Executes an ADK Agent with the Parallel Search tool to research a song's licensing status and Content ID risk.
+    Autonomous research agent combining Google ADK runner with Parallel Search,
+    with direct Parallel deep-search fallback for resilience.
     """
-    # Initialize the ADK Agent
     agent = Agent(
-        name=f"LicensingAgent_{abs(hash(title)) % 10000}",
+        name="LicensingAgent",
         model=GEMINI_MODEL,
-        description="Church music licensing and YouTube Content ID research specialist.",
+        description="Autonomous copyright research agent using Parallel Search tool",
         instruction=LICENSING_AGENT_INSTRUCTION,
         tools=[search_licensing_web]
     )
@@ -106,7 +78,7 @@ async def research_song(
     """
 
     final_text = ""
-    max_retries = 3
+    max_retries = 2
 
     for attempt in range(max_retries):
         runner = InMemoryRunner(agent=agent)
@@ -124,22 +96,53 @@ async def research_song(
             if final_text:
                 break
         except Exception as e:
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                wait_time = 15.0 * (attempt + 1)
-                print(f"[ADK 429 Rate Limit] Backing off for {wait_time}s on '{title}'...")
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e) or "503" in str(e):
+                wait_time = 6.0 * (attempt + 1)
+                print(f"[ADK Rate/Demand Notice] Backing off {wait_time}s on '{title}'...")
                 await asyncio.sleep(wait_time)
             else:
                 if attempt == max_retries - 1:
-                    print(f"ADK runner error on '{title}': {e}")
-                await asyncio.sleep(3.0)
+                    print(f"ADK runner notice on '{title}': {e}")
+                await asyncio.sleep(2.0)
         finally:
             try:
                 await runner.close()
             except Exception:
                 pass
 
+    # Direct Parallel Search Grounding Fallback if ADK returned empty
+    if not final_text:
+        print(f"Executing direct Parallel deep search grounding fallback for '{title}'...")
+        deep_search = await async_research_licensing_deep(title, artist_or_source, licenses_held)
+        search_results = deep_search.get("results", [])
+        
+        extracted_sources: List[Source] = []
+        ccli_found = None
+        for item in search_results[:4]:
+            t = getattr(item, "title", "Citation") or "Citation"
+            u = getattr(item, "url", "") or ""
+            if "ccli.com/songs/" in u:
+                m = re.search(r"ccli\.com/songs/(\d+)", u)
+                if m:
+                    ccli_found = m.group(1)
+            extracted_sources.append(Source(url=u, title=t, note="Direct Parallel Web verification"))
 
-    # Attempt to parse JSON
+        fallback_prompt = f"""
+        Generate a structured SongVerdict for '{title}' by '{artist_or_source}' based on these Parallel search findings:
+        - Church Licenses: {json.dumps(licenses_held)}
+        - Detected CCLI ID: {ccli_found}
+        - Search Citations: {[s.model_dump() for s in extracted_sources]}
+        """
+        try:
+            return await generate_structured(
+                prompt=fallback_prompt,
+                schema=SongVerdict,
+                system_instruction=LICENSING_AGENT_INSTRUCTION
+            )
+        except Exception as deep_err:
+            print(f"Deep search structured synthesis notice: {deep_err}")
+
+    # Attempt to parse ADK JSON
     cleaned = _clean_json_text(final_text)
     try:
         data = json.loads(cleaned)
@@ -147,7 +150,6 @@ async def research_song(
     except Exception as parse_err:
         print(f"Direct JSON parse failed for '{title}': {parse_err}. Initiating repair pass...")
 
-        # Repair pass via structured Gemini call
         repair_prompt = f"""
         Convert the following research findings into the exact SongVerdict JSON schema.
         Do not invent new facts. Maintain all sources and details accurately:
@@ -164,8 +166,7 @@ async def research_song(
             )
             return repaired
         except Exception as repair_err:
-            print(f"Repair pass failed for '{title}': {repair_err}")
-            # Safe fallback verdict
+            print(f"Repair pass notice for '{title}': {repair_err}")
             return SongVerdict(
                 legal_status=LegalStatus.UNKNOWN,
                 legal_summary=f"Unable to automatically confirm licensing details for '{title}'. Please verify in CCLI SongSelect.",
@@ -188,15 +189,15 @@ async def research_setlist_concurrently(
     licenses_held: List[str]
 ) -> List[SongVerdict]:
     """
-    Runs licensing research for all songs concurrently using asyncio.gather.
+    Research all songs concurrently using asyncio.gather.
     """
     tasks = [
         research_song(
-            title=song["title"],
-            artist_or_source=song.get("artist_or_source", ""),
+            title=item.get("title", ""),
+            artist_or_source=item.get("artist_or_source", ""),
             licenses_held=licenses_held,
-            language=song.get("language", "English")
+            language=item.get("language", "English")
         )
-        for song in songs_data
+        for item in songs_data
     ]
-    return await asyncio.gather(*tasks, return_exceptions=False)
+    return await asyncio.gather(*tasks)

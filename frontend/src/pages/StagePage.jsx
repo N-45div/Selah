@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Radio, Music } from 'lucide-react';
+import { Clock, Radio, Music, VolumeX, ShieldAlert } from 'lucide-react';
 
 export default function StagePage() {
   const [currentSlide, setCurrentSlide] = useState(null);
@@ -7,6 +7,7 @@ export default function StagePage() {
   const [songInfo, setSongInfo] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
   const [isBlackout, setIsBlackout] = useState(false);
+  const [isAudioMuted, setIsAudioMuted] = useState(false);
 
   // Clock
   useEffect(() => {
@@ -24,6 +25,8 @@ export default function StagePage() {
       bc.onmessage = (event) => {
         if (event.data?.type === 'BLACKOUT_TOGGLE') {
           setIsBlackout(event.data.isBlackout);
+        } else if (event.data?.type === 'AUDIO_MUTE_TOGGLE') {
+          setIsAudioMuted(event.data.isMuted);
         } else if (event.data?.type === 'SLIDE_CHANGE' && event.data.slide) {
           setCurrentSlide(event.data.slide);
           setNextSlide(event.data.nextSlide || null);
@@ -41,8 +44,8 @@ export default function StagePage() {
 
   if (isBlackout) {
     return (
-      <div style={{ backgroundColor: '#000000', width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333333', fontFamily: 'Inter, sans-serif' }}>
-        [ STAGE SCREEN MUTED / BLACKOUT ]
+      <div style={{ backgroundColor: '#000000', width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555550', fontFamily: 'Inter, sans-serif', fontSize: '2vw', letterSpacing: '0.1em' }}>
+        [ SANCTUARY & BROADCAST BLACKOUT ACTIVE ]
       </div>
     );
   }
@@ -54,7 +57,7 @@ export default function StagePage() {
         color: '#ffffff',
         width: '100vw',
         height: '100vh',
-        padding: '2.5vw 4vw',
+        padding: '2vw 3.5vw',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -71,61 +74,78 @@ export default function StagePage() {
           justifyContent: 'space-between',
           alignItems: 'center',
           borderBottom: '2px solid #262624',
-          paddingBottom: '1.5vw',
+          paddingBottom: '1.2vw',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '1vw' }}>
-          <Music size={28} color="#4e8a66" />
+          <div style={{ background: '#1e2820', padding: '0.6vw', borderRadius: '8px', border: '1px solid #3d6b50' }}>
+            <Music size={26} color="#4e8a66" />
+          </div>
           <div>
-            <div style={{ fontSize: '1.8vw', fontWeight: 700, color: '#f5f2eb' }}>
+            <div style={{ fontSize: '1.7vw', fontWeight: 700, color: '#f5f2eb' }}>
               {songInfo || 'Selah Stage Confidence Monitor'}
             </div>
-            <div style={{ fontSize: '1vw', color: '#807a70', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Worship Team Stage View
+            <div style={{ fontSize: '0.95vw', color: '#807a70', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Worship Team Stage View • 0ms Local Sync
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5vw' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5vw', background: '#1c1b18', padding: '0.6vw 1.2vw', borderRadius: '8px', border: '1px solid #38342c' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.2vw' }}>
+          {isAudioMuted && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4vw', background: '#3b120f', border: '1px solid #a33f2e', color: '#fca5a5', padding: '0.5vw 1vw', borderRadius: '8px', fontSize: '1vw', fontWeight: 700, animation: 'pulse 1.5s infinite' }}>
+              <VolumeX size={18} />
+              LIVESTREAM AUDIO MUTED (SAFE MODE)
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5vw', background: '#1c1b18', padding: '0.5vw 1.2vw', borderRadius: '8px', border: '1px solid #38342c' }}>
             <Clock size={20} color="#d4912a" />
-            <span style={{ fontSize: '1.6vw', fontWeight: 700, color: '#f5f2eb', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: '1.5vw', fontWeight: 700, color: '#f5f2eb', fontVariantNumeric: 'tabular-nums' }}>
               {currentTime}
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4vw', background: '#2d1411', padding: '0.6vw 1vw', borderRadius: '8px', border: '1px solid #59231c', color: '#f08e84', fontSize: '1vw', fontWeight: 600 }}>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4vw', background: '#2d1411', padding: '0.5vw 1vw', borderRadius: '8px', border: '1px solid #59231c', color: '#f08e84', fontSize: '1vw', fontWeight: 700, letterSpacing: '0.05em' }}>
             <Radio size={16} /> LIVE ON AIR
           </div>
         </div>
       </div>
 
       {/* Main Center Area: Current Lyrics (Huge White Serif) */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '2vw 0' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '1.5vw 0' }}>
         {currentSlide ? (
           <div>
+            {currentSlide.label && (
+              <div style={{ display: 'inline-block', background: '#2d2210', border: '1px solid #59421a', color: '#f0c56e', padding: '0.3vw 0.8vw', borderRadius: '6px', fontSize: '1.1vw', fontWeight: 700, textTransform: 'uppercase', marginBottom: '1vw', letterSpacing: '0.06em' }}>
+                [{currentSlide.label}]
+              </div>
+            )}
+            
             <div
               style={{
                 fontFamily: '"Lora", "Georgia", serif',
-                fontSize: '4.8vw',
+                fontSize: '4.5vw',
                 fontWeight: 600,
-                lineHeight: 1.3,
+                lineHeight: 1.25,
                 color: '#ffffff',
-                textShadow: '0 2px 12px rgba(0,0,0,0.8)',
+                textShadow: '0 2px 14px rgba(0,0,0,0.9)',
               }}
             >
               {currentSlide.lines?.map((line, idx) => (
-                <div key={idx} style={{ margin: '0.5vw 0' }}>{line}</div>
+                <div key={idx} style={{ margin: '0.4vw 0' }}>{line}</div>
               ))}
             </div>
 
             {currentSlide.transliteration?.length > 0 && (
               <div
                 style={{
-                  fontSize: '2.4vw',
+                  fontSize: '2.2vw',
                   color: '#d4912a',
                   fontStyle: 'italic',
-                  marginTop: '1.5vw',
+                  marginTop: '1.2vw',
                   letterSpacing: '0.02em',
+                  fontFamily: 'Inter, sans-serif'
                 }}
               >
                 {currentSlide.transliteration.map((tLine, idx) => (
@@ -135,7 +155,7 @@ export default function StagePage() {
             )}
           </div>
         ) : (
-          <div style={{ textAlign: 'center', color: '#666056', fontSize: '2.5vw' }}>
+          <div style={{ textAlign: 'center', color: '#666056', fontSize: '2.2vw' }}>
             Awaiting lyrics from media booth operator...
           </div>
         )}
@@ -160,7 +180,7 @@ export default function StagePage() {
             border: '1px solid #59421a',
             padding: '0.3vw 0.8vw',
             borderRadius: '6px',
-            fontSize: '0.9vw',
+            fontSize: '0.95vw',
             fontWeight: 700,
             textTransform: 'uppercase',
             letterSpacing: '0.06em',
@@ -178,7 +198,14 @@ export default function StagePage() {
             whiteSpace: 'nowrap',
           }}
         >
-          {nextSlide ? nextSlide.lines?.join(' / ') : '(End of Song / Section)'}
+          {nextSlide ? (
+            <>
+              {nextSlide.label ? `[${nextSlide.label}] ` : ''}
+              {nextSlide.lines?.join(' / ')}
+            </>
+          ) : (
+            '(End of Song / Service)'
+          )}
         </span>
       </div>
     </div>

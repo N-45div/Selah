@@ -1,36 +1,37 @@
 # 🕊️ Selah — Live Telecast Copilot for Church Media Volunteers
 
-> **The pastor picks the songs. Selah makes sure the livestream doesn't get muted, the slides are ready, and the paperwork is done.**
+> **The pastor picks the songs. Selah makes sure the livestream doesn't get muted, the slides are ready, and the compliance paperwork is done.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Google Cloud](https://img.shields.io/badge/Google_Cloud-Agentic_Cinema-4285F4?logo=googlecloud&logoColor=white)](https://agentic-cinema.devpost.com/)
 [![Parallel Track](https://img.shields.io/badge/Partner_Track-Parallel_Search-6366F1)](https://parallel.ai)
 [![Gemini](https://img.shields.io/badge/Model-Gemini_3.5_Flash-8E75B2?logo=google&logoColor=white)](https://ai.google.dev/)
+[![Architecture](https://img.shields.io/badge/Architecture-Mermaid_Spec-10B981)](ARCHITECTURE.md)
 
 ---
 
 ## 📖 The Problem
 
-A small or medium church can hold every music license correctly (such as CCLI Copyright & Streaming licenses) and **still get muted, claimed, or copyright-striked on YouTube**. 
+Every Sunday, thousands of churches hold valid music copyright licenses (e.g., CCLI Copyright & Streaming licenses) and **still get muted, claimed, or copyright-striked on YouTube and Facebook Live**.
 
-Why? **CCLI licensing has zero connection to YouTube's automated Content ID algorithm.** 
+### Why?
+1. **CCLI licensing has zero API connection to YouTube's automated Content ID algorithm.** Content ID matches sound wave patterns to commercial label recordings, triggering automated mutes even when the church performs their own live acoustic rendition.
+2. **Volunteers run Sunday booths.** Sunday morning livestreams are run by church volunteers (often teenagers or retirees) who just want to display lyrics. When an unexpected copyright strike or audio mute lands, panic ensues in the media booth.
 
-Meanwhile, Sunday morning livestreams are run by volunteers (often teenagers or retirees) who just need to present slides. When an automated copyright strike lands or audio gets muted mid-service, panic ensues.
-
-### Selah's Hard Boundary:
+### 🛡️ Selah's Strict Product Boundary:
 **Selah never chooses the worship. It serves it.**  
-The agent **never** suggests, recommends, ranks, or substitutes songs. Input is always the exact set list the pastor or worship leader chose. Red-verdict songs present **clear operational choices for humans** (mute stream audio during the song, confirm CCLI streaming coverage, or verify public domain arrangements) — *never alternative songs*.
+The agent **never** suggests, recommends, ranks, or substitutes songs. Input is always the exact set list the pastor or worship leader chose. Red-verdict songs present **clear operational choices for humans** (*"Mute stream audio during this song"*, *"Confirm CCLI streaming coverage"*, or *"Verify public domain arrangement"*) — *never alternative songs*.
 
 ---
 
-## 🏛️ Autonomous Agent Architecture & SDK Runtime Usage
+## 🏛️ System Architecture & Autonomous Agent Pipeline
 
-Selah is built for the **Google Cloud "Agentic Cinema" Hackathon (Parallel Partner Track)**. All AI orchestration and web research use official Google and Parallel runtime SDKs:
+Selah is built for the **Google Cloud "Agentic Cinema" Hackathon (Parallel Partner Track)**. All agent orchestration and grounded web research utilize official Google Cloud and Parallel runtime SDKs:
 
 ```
                                   Pastor / Worship Team
                                             │
-                                (Pasted Text or Photo)
+                                (Photo / Text / PCO Plan)
                                             │
                                             ▼
                     ┌──────────────────────────────────────────────┐
@@ -44,7 +45,7 @@ Selah is built for the **Google Cloud "Agentic Cinema" Hackathon (Parallel Partn
              │       Autonomous Licensing & Rights Research Agent          │
              │       [backend/app/agents/licensing_agent.py]               │
              │       • Orchestrated by google-adk 2.7.0 (InMemoryRunner)   │
-             │       • Concurrent research via asyncio.gather              │
+             │       • Grounded verification via Parallel Web Search       │
              └──────────────────────┬──────────────────────────────┬───────┘
                                     │                              │
                      Calls Tool via ADK             2-Axis Copyright &
@@ -67,117 +68,123 @@ Selah is built for the **Google Cloud "Agentic Cinema" Hackathon (Parallel Partn
                                             │     Act 2: Broadcast Console & OBS Output    │
                                             │     [frontend/src/pages/ConsolePage.jsx]     │
                                             │     • Go-Live Guard (Unresolved Song Lock)   │
-                                            │     • BroadcastChannel Instant Screen Sync   │
-                                            │     • Live Elapsed Time & YouTube Chapters   │
+                                            │     • BroadcastChannel 0ms Screen Sync       │
+                                            │     • Musician HUD & 16:9 PPTX Exporter      │
                                             └──────────────────────┬───────────────────────┘
                                                                    │
                                                                    ▼
                                             ┌──────────────────────────────────────────────┐
                                             │     Act 3: Post-Broadcast Close-Out Pack     │
                                             │     [backend/app/agents/closeout_agent.py]   │
-                                            │     • YouTube Description + Attributions     │
-                                            │     • CCLI Usage Log & Dispute Statements    │
+                                            │     • YouTube Description + CCLI Log         │
+                                            │     • Multi-Platform Statutory Dispute Kit   │
                                             └──────────────────────────────────────────────┘
 ```
 
-### Verified Runtime Code Locations:
-1. **Google ADK (`google-adk`)**:
+> 📄 For full architectural diagrams and sequence flows, see [**`ARCHITECTURE.md`**](ARCHITECTURE.md).
+
+---
+
+## 🛠️ Verified Runtime Code Locations
+
+1. **Google ADK (`google-adk` 2.7.0)**:
    - [`backend/app/agents/licensing_agent.py`](backend/app/agents/licensing_agent.py) — Defines `Agent(tools=[search_licensing_web])` and executes asynchronously with `InMemoryRunner.run_debug()`.
-2. **Google GenAI (`google-genai`)**:
-   - [`backend/app/services/gemini_client.py`](backend/app/services/gemini_client.py) — Native Gemini client with structured Pydantic schema validation.
-   - [`backend/app/agents/setlist_agent.py`](backend/app/agents/setlist_agent.py) — Multimodal image + text intake.
+2. **Google GenAI (`google-genai` 2.18.1)**:
+   - [`backend/app/services/gemini_client.py`](backend/app/services/gemini_client.py) — Multi-key rotation pool and structured Pydantic schema validation.
+   - [`backend/app/agents/setlist_agent.py`](backend/app/agents/setlist_agent.py) — Multimodal OCR + text parsing.
    - [`backend/app/agents/pack_agent.py`](backend/app/agents/pack_agent.py) — Slide proofreading & Latin transliteration for Indic scripts.
-   - [`backend/app/agents/closeout_agent.py`](backend/app/agents/closeout_agent.py) — Compliance packaging and legal dispute paragraph generator.
-3. **Parallel Search SDK (`parallel-web`)**:
+   - [`backend/app/agents/closeout_agent.py`](backend/app/agents/closeout_agent.py) — Multi-platform compliance dossier and DMCA § 512(g) dispute statements.
+3. **Parallel Search SDK (`parallel-web` 1.3.0)**:
    - [`backend/app/services/parallel_client.py`](backend/app/services/parallel_client.py) — Calls `Parallel(api_key).search()` with objective-driven search queries and trimmed citations (~900 chars).
 4. **No Non-Google AI**: 100% powered by Gemini (`gemini-3.5-flash`). Zero OpenAI, Anthropic, or third-party AI audio-fingerprinting dependencies.
 
 ---
 
-## ✨ Key Features & The 3-Act Workflow
+## ✨ Key Features Across the 3 Acts
 
-### Act 1: Prepare (Intake & Rights Guard)
-- **Multimodal Setlist Ingestion**: Accepts raw typed text, WhatsApp messages, or photos of handwritten song lists.
-- **Two-Axis Verdicts**:
-  - 🟢 **Covered**: Covered under church's held licenses.
-  - 🟡 **Public Domain**: Hymn text is PD, but highlights Content ID match risk and mitigation.
-  - 🔴 **Needs License**: Calls out missing streaming license tiers (e.g. CCLI Streaming vs base Copyright license).
-- **Cited Sources**: Every claim links to verified web sources from Parallel Search.
-- **Go-Live Guard**: Blocks broadcast until the operator selects an operational resolution for any red-verdict song.
-- **Diaspora Transliteration**: Generates Latin phonetic lines under Indic script lyrics (Tamil, Malayalam, Telugu, Hindi) for diaspora youth.
+### Act 1: Intake & Autonomous Rights Guard
+- **Tri-Modal Setlist Ingestion**: Accepts raw typed text, Planning Center Services format, or photos of handwritten song lists.
+- **1-Click Hackathon Judge Presets**: Instant benchmark evaluation buttons for standard praise, diaspora bilingual services, and compound medleys.
+- **Autonomous Research Engine**: Parallel Web searches CCLI SongSelect and Hymnary to identify registered owners, CCLI song numbers, and public domain cutoff dates (pre-1929).
+- **Progressive Rights Verdicts**: Green (Covered), Yellow (Public Domain), or Red (Action Required) with full cited web sources.
+- **Human-in-the-Loop Decision Gate**: Unresolved red-verdict songs block the "Go Live" button until a volunteer explicitly chooses how to handle the broadcast risk.
+- **Diaspora Transliteration**: Automatic Latin phonetic transliteration for Indian languages (Tamil, Malayalam, Hindi, Telugu) so non-native speakers can sing along.
 
-### Act 2: Broadcast (Operator Console, Stage Monitor & OBS Lower Thirds)
-- **Volunteer Operator Console** (`/console`): Clean, dual-theme (Warm Paper `#faf8f4` & Studio Dark Mode `#121110`), big tactile buttons, USB foot pedal & hotkey navigation (`Space` / `→` / `←` / `PageDown`).
-- **Emergency Panic Controls Bar**: Instant `[Esc]` screen blackout, `[M]` stream audio safe mode toggle, and live service progress track.
-- **OBS / vMix Output Screen** (`/output`): Clean dark presentation view, massive serif text, synced locally via `BroadcastChannel` with zero latency.
-- **Transparent Lower Thirds Mode** (`/output?mode=lower-third`): Dedicated alpha-transparent browser overlay for OBS and vMix with animated 2-line lyric banners.
-- **Stage Confidence Monitor** (`/stage`): High-contrast prompter for vocalists and pastors showing live clock, current lyrics, and upcoming next lines.
-- **ProPresenter 7 Export**: 1-click export of structured `.json` bundle for church presentation software.
-- **Live Chapter Marking**: One-click timestamps for "Welcome", "Worship", "Prayer", "Sermon", "Benediction".
+### Act 2: Live Telecast Operator Console & Displays
+- **Local Multi-Screen Sync**: Browser-native `BroadcastChannel` provides 0ms screen synchronization between the operator console, sanctuary projector, and broadcast overlays.
+- **OBS / vMix Transparent Lower Thirds** (`/output?mode=lower-third`): Studio-grade transparent lower thirds with glassmorphism, gold accents, and diaspora sublines.
+- **Musician Stage HUD** (`/stage`): Stage confidence monitor displaying active lyrics, amber *"Next Up"* line preview, live digital clock, section tags (`[Chorus]`), and audio safe-mute alerts.
+- **Dual Presentation Hardware Export**: 1-Click download of **16:9 Widescreen PowerPoint (`.pptx`)** presentations and **ProPresenter 7 (`.json`)** bundles.
+- **Hardware Foot Pedal & Keyboard Controls**: Supports USB foot pedals, wireless presenter remotes, `Space` / arrow keys, `Esc` (blackout), and `M` (safe audio mute).
 
-
-### Act 3: Close Out (Compliance & Dispute Kit)
-- **YouTube Description**: Pre-formatted with mandatory CCLI license attributions.
-- **CCLI Reporting Log**: Markdown table ready to paste into the quarterly CCLI portal.
-- **Content ID Dispute Pack**: Pre-drafted legal dispute statements citing public domain status or CCLI license coverage with Parallel search citations.
-- **One-Click Export**: Downloadable `.md` compliance pack.
+### Act 3: Post-Broadcast Compliance & Dispute Defense
+- **YouTube Metadata & Attributions**: Pre-formatted description with mandatory CCLI license attributions and 0:00-indexed timestamp chapters.
+- **Quarterly CCLI Audit Table**: Ready-to-copy markdown table formatted for church administrative reporting.
+- **Multi-Platform Statutory Dispute Kit**: Pre-drafted DMCA § 512(g) counter-notices and Meta / Facebook Rights Manager appeals with grounded web citations.
+- **1-Click Markdown Download**: Export the entire compliance pack as a standalone `.md` document.
 
 ---
 
-## 🚀 Quickstart Guide
+## 🎯 Benchmark Judge Test Cases
 
-### 1. Prerequisites
+| Test Case | Scenario | Expected Agent Behavior |
+| :--- | :--- | :--- |
+| **TC-01** | *"In Christ Alone"* (Keith Getty) with CCLI Copyright License only | Flagged **RED** (Needs CCLI Streaming License). Blocks Go-Live until operator chooses Safe Mode or confirms streaming coverage. |
+| **TC-02** | *"Amazing Grace"* (John Newton, 1779) | Flagged **YELLOW** (Public Domain). Notes composition is free from royalties; original church performance safe to stream. |
+| **TC-03** | *"Way Maker"* (Sinach) with CCLI Streaming License | Flagged **GREEN** (Covered). Generates mandatory CCLI SongSelect attribution line for YouTube description. |
+| **TC-04** | *"Enakkai Jeevan Vittavare"* (Tamil Worship) | Flagged **GREEN** with phonetic Latin transliteration generated for all verses and chorus slides. |
+| **TC-05** | *"Way Maker / Great Are You Lord"* (Medley) | Decomposes compound slash setlist line into separate songs and evaluates rights independently. |
+
+---
+
+## 🚀 Local Development Quickstart
+
+### Prerequisites
 - Python 3.12+
-- Node.js 18+ & npm
-- Google AI Studio API Key (`GEMINI_API_KEY`)
+- Node.js 20+
+- Google Gemini API Key (`GEMINI_API_KEY`)
 - Parallel Search API Key (`PARALLEL_API_KEY`)
 
-### 2. Clone & Configure
-```bash
-git clone https://github.com/N-45div/Selah.git
-cd Selah
+### Setup Instructions
 
-# Copy sample environment configuration
-cp .env.example .env
-```
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/N-45div/Selah.git
+   cd Selah
+   ```
 
-Edit `.env` with your API keys:
-```env
-GEMINI_API_KEY=your_google_gemini_api_key
-PARALLEL_API_KEY=your_parallel_api_key
-GEMINI_MODEL=gemini-3.5-flash
-```
+2. **Configure Environment Variables**:
+   Create a `.env` file in the `backend/` directory:
+   ```env
+   GEMINI_API_KEY=your_gemini_api_key_here
+   PARALLEL_API_KEY=your_parallel_api_key_here
+   GEMINI_MODEL=gemini-3.5-flash
+   ```
 
-### 3. Backend Setup
-```bash
-# Install Python dependencies
-pip install -r backend/requirements.txt
+3. **Install Dependencies & Build Frontend**:
+   ```bash
+   # Install backend dependencies
+   pip install -r backend/requirements.txt
 
-# Run FastAPI backend
-python -m uvicorn backend.app.main:app --reload --port 8000
-```
+   # Install frontend dependencies and build
+   cd frontend
+   npm install
+   npm run build
+   cd ..
+   ```
 
-### 4. Frontend Setup (Vite + React)
-In a second terminal:
-```bash
-cd frontend
-npm install
-npm run dev
-```
+4. **Run the Application**:
+   ```bash
+   # Launch with FastAPI
+   uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
 
-Visit **`http://localhost:5173`** (or `http://localhost:8000` after `npm run build`).
-
----
-
-## 🧪 Acceptance Benchmark Tests
-
-| Test Case | Setlist Input | Expected Verdict | Reason |
-| :--- | :--- | :--- | :--- |
-| **Test 1** | *In Christ Alone* (Keith Getty & Stuart Townend)<br>Church holds only "CCLI Copyright License" | 🔴 `needs_license`<br>Owner: Thankyou Music / Capitol CMG<br>CCLI #3350395 | CCLI Copyright License covers in-person projection only. Online streaming requires the CCLI Streaming License. |
-| **Test 2** | *Amazing Grace* (John Newton) | 🟡 `public_domain`<br>Content ID Risk: Medium | Hymn text is PD (1779), but automated algorithms match contemporary recordings. Pre-drafted dispute statements provided. |
+5. **Open in Browser**:
+   - Operator Console: `http://localhost:8000`
+   - OBS Lower Third Overlay: `http://localhost:8000/output?mode=lower-third`
+   - Musician Stage HUD: `http://localhost:8000/stage`
 
 ---
 
 ## 📄 License
-
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.

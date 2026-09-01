@@ -243,7 +243,57 @@ export default function PreparePage({ plan, setPlan }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Setlist Songs (Pasted Text or WhatsApp Order)</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <label className="form-label" style={{ margin: 0 }}>Setlist Songs (Pasted Text or PCO Format)</label>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--amber-accent)' }}>⚡ Quick Presets for Judges:</span>
+              </div>
+
+              {/* Hackathon Judge 1-Click Demo Presets */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.6rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-small"
+                  style={{ fontSize: '0.72rem', padding: '0.2rem 0.6rem' }}
+                  onClick={() => {
+                    setServiceName('Sunday Praise & Broadcast Guard');
+                    setSelectedLicenses(['CCLI Copyright License']);
+                    setLanguage('English');
+                    setSetlistText('1. In Christ Alone - Keith Getty & Stuart Townend\n2. Amazing Grace - John Newton\n3. Way Maker - Sinach');
+                    setImageFile(null);
+                  }}
+                >
+                  🎯 Benchmark (TC-01 Red Guard + TC-02 PD)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-small"
+                  style={{ fontSize: '0.72rem', padding: '0.2rem 0.6rem' }}
+                  onClick={() => {
+                    setServiceName('Diaspora Bilingual Telecast');
+                    setSelectedLicenses(['CCLI Streaming License']);
+                    setLanguage('Tamil');
+                    setSetlistText('1. Enakkai Jeevan Vittavare (Tamil Worship)\n2. 10,000 Reasons (Bless The Lord) - Matt Redman\n3. How Great Thou Art - Stuart K. Hine');
+                    setImageFile(null);
+                  }}
+                >
+                  🌐 Diaspora Bilingual (Tamil + English)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-small"
+                  style={{ fontSize: '0.72rem', padding: '0.2rem 0.6rem' }}
+                  onClick={() => {
+                    setServiceName('Sunday Medley Telecast');
+                    setSelectedLicenses(['CCLI Streaming License']);
+                    setLanguage('English');
+                    setSetlistText('1. Way Maker / Great Are You Lord (Medley)\n2. Blessed Assurance -> King of Kings\n3. Holy Holy Holy - Reginald Heber');
+                    setImageFile(null);
+                  }}
+                >
+                  🔀 Medley Decomposer (Slash/Arrow Split)
+                </button>
+              </div>
+
               <textarea
                 className="form-textarea"
                 value={setlistText}
@@ -251,9 +301,11 @@ export default function PreparePage({ plan, setPlan }) {
                   setSetlistText(e.target.value);
                   setImageFile(null);
                 }}
-                placeholder="Paste song titles, authors, or hymns here..."
+                placeholder="Paste song titles, authors, Planning Center format, or hymns..."
+                rows={5}
               />
             </div>
+
 
             <div className="form-group">
               <label className="form-label">OR Upload Handwritten Setlist Photo</label>

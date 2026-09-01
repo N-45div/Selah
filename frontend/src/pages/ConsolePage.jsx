@@ -260,6 +260,17 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
     a.click();
   };
 
+  // Export Slide Deck as 16:9 Widescreen PowerPoint Presentation
+  const handleExportPowerPoint = () => {
+    if (!plan?.id) return;
+    const downloadUrl = `/api/plan/${plan.id}/export/pptx`;
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `Selah_${plan.service_name.replace(/\s+/g, '_')}_16x9.pptx`;
+    a.click();
+  };
+
+
   const formatTimer = (totalSeconds) => {
     const hrs = Math.floor(totalSeconds / 3600);
     const mins = Math.floor((totalSeconds % 3600) / 60);
@@ -574,7 +585,17 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
               <li><strong>M:</strong> Toggle audio safe mute indicator</li>
             </ul>
 
-            <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
+            <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ width: '100%', fontSize: '0.82rem' }}
+                onClick={handleExportPowerPoint}
+              >
+                <Download size={14} color="var(--amber-accent)" />
+                <span>Download 16:9 PowerPoint Presentation (.pptx)</span>
+              </button>
+
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -585,6 +606,7 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
                 <span>Export ProPresenter 7 Bundle (.json)</span>
               </button>
             </div>
+
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from ..models import ServicePlan, CloseoutPack
 from ..services.gemini_client import generate_structured
 from pydantic import BaseModel, Field
@@ -7,23 +7,29 @@ from pydantic import BaseModel, Field
 
 class DisputeItem(BaseModel):
     song_title: str
-    dispute_paragraph: str = Field(
-        description="Formal, ready-to-paste paragraph explaining the church's license or public domain status with cited sources for YouTube dispute form"
+    youtube_dispute: str = Field(
+        description="Formal, ready-to-paste statement for YouTube Content ID dispute citing CCLI Streaming License, CCLI SongSelect ID, and live church performance rights"
+    )
+    facebook_dispute: str = Field(
+        description="Concise statement for Meta / Facebook Rights Manager appeal"
     )
 
 
 class GeneratedCloseoutDraft(BaseModel):
     service_summary: str = Field(description="Inspiring, calm 2-sentence summary for the YouTube description")
-    disputes: list[DisputeItem] = Field(description="Dispute explanations for each song")
+    disputes: List[DisputeItem] = Field(description="Dispute explanations for each song")
 
 
 CLOSEOUT_SYSTEM_INSTRUCTION = """
 You are Selah's Church Broadcast Close-Out Assistant.
-Your task is to generate post-broadcast compliance documentation, including YouTube stream descriptions, CCLI usage logs, and Content ID dispute paragraphs.
+Your task is to generate post-broadcast compliance documentation across platforms (YouTube, Facebook Live, Twitch), including YouTube stream descriptions, CCLI usage logs, and multi-platform Content ID dispute statements.
 
-DISPUTE WRITING GUIDANCE:
-- For copyrighted songs covered by CCLI Streaming License: Cite the exact church license, song title, author, CCLI song ID, and note that the church holds non-commercial live streaming synchronization rights under CCLI.
-- For public domain songs: State clearly that the musical composition and lyrics are in the Public Domain (published prior to 1929/1930) and that this live broadcast is an original church rendition, not a copyrighted master recording.
+STATUTORY DISPUTE GUIDELINES:
+1. YouTube Content ID:
+   - For copyrighted songs covered by CCLI Streaming License: Cite 17 U.S.C. § 106/107, CCLI License Number, registered publisher, CCLI Song ID, and note that the church holds non-commercial live streaming synchronization rights.
+   - For public domain songs: State clearly that the musical composition and lyrics are in the Public Domain (published prior to 1929) and that this live broadcast is an original rendition, not a copyrighted master recording.
+2. Facebook / Meta Rights Manager:
+   - Provide a concise 2-sentence notice stating the church holds the active CCLI Streaming License covering this live telecast.
 """
 
 
@@ -39,11 +45,11 @@ def _format_seconds(seconds: int) -> str:
 
 async def generate_closeout_pack(plan: ServicePlan) -> CloseoutPack:
     """
-    Assembles the complete CloseoutPack including:
+    Assembles the complete Multi-Platform CloseoutPack including:
     1. YouTube description with mandatory CCLI attributions.
     2. YouTube chapter markers.
-    3. CCLI usage log table.
-    4. YouTube Content ID dispute kit.
+    3. CCLI usage log table for quarterly reporting.
+    4. Multi-Platform Content ID & Rights Manager dispute kit.
     """
     today_str = datetime.now().strftime("%Y-%m-%d")
 
@@ -57,7 +63,7 @@ async def generate_closeout_pack(plan: ServicePlan) -> CloseoutPack:
         chapter_lines.append(f"{ts} {ch.label}")
 
     if not has_zero:
-        chapter_lines.insert(0, "0:00 Welcome & Opening")
+        chapter_lines.insert(0, "0:00 Welcome & Opening Worship")
 
     chapters_text = "\n".join(chapter_lines)
 
@@ -67,7 +73,8 @@ async def generate_closeout_pack(plan: ServicePlan) -> CloseoutPack:
         if s.verdict and s.verdict.attribution_line:
             attributions.append(s.verdict.attribution_line)
         else:
-            attributions.append(f"{s.title} - {s.artist_or_source or 'Worship'}")
+            ccli = f" (CCLI #{s.verdict.ccli_number})" if s.verdict and s.verdict.ccli_number else ""
+            attributions.append(f"{s.title} - {s.artist_or_source or 'Traditional'}{ccli}")
 
     licenses_str = ", ".join(plan.licenses_held) if plan.licenses_held else "None recorded"
 
@@ -92,11 +99,31 @@ async def generate_closeout_pack(plan: ServicePlan) -> CloseoutPack:
     - Songs: {songs_context}
     """
 
-    ai_draft = await generate_structured(
-        prompt=prompt,
-        schema=GeneratedCloseoutDraft,
-        system_instruction=CLOSEOUT_SYSTEM_INSTRUCTION
-    )
+    try:
+        ai_draft = await generate_structured(
+            prompt=prompt,
+            schema=GeneratedCloseoutDraft,
+            system_instruction=CLOSEOUT_SYSTEM_INSTRUCTION
+        )
+    except Exception as e:
+        print(f"Closeout AI drafting fallback notice: {e}")
+        # Deterministic fallback
+        fallback_disputes = []
+        for s in plan.songs:
+            ccli_id = s.verdict.ccli_number if s.verdict and s.verdict.ccli_number else "Registered"
+            owner_name = s.verdict.owner if s.verdict and s.verdict.owner else "Copyright Owner"
+            if s.verdict and s.verdict.legal_status.value == "public_domain":
+                yt_disp = f"The composition and lyrics of '{s.title}' are in the Public Domain (published prior to 1929). This broadcast is an original live church performance and does not infringe any sound recording copyright."
+                fb_disp = f"Public Domain hymn '{s.title}' performed live by church congregation. No master recording copyright applies."
+            else:
+                yt_disp = f"This church holds an active CCLI Streaming License ({licenses_str}) granting synchronization and live digital transmission rights for '{s.title}' (CCLI SongSelect #{ccli_id}, Administered by {owner_name}). This is a non-commercial religious broadcast."
+                fb_disp = f"Covered under active church CCLI Streaming License for '{s.title}' (CCLI #{ccli_id})."
+            fallback_disputes.append(DisputeItem(song_title=s.title, youtube_dispute=yt_disp, facebook_dispute=fb_disp))
+
+        ai_draft = GeneratedCloseoutDraft(
+            service_summary=f"Sunday live broadcast of {plan.service_name}. Join us for worship and the Word.",
+            disputes=fallback_disputes
+        )
 
     # 4. Build YouTube Description
     description_parts = [
@@ -105,7 +132,7 @@ async def generate_closeout_pack(plan: ServicePlan) -> CloseoutPack:
         ai_draft.service_summary,
         "",
         "--- MUSIC COPYRIGHT & LICENSING ATTRIBUTION ---",
-        "Songs used under church worship streaming licensing:",
+        "Songs broadcast under church worship streaming licensing agreements:",
     ]
     for attr in attributions:
         description_parts.append(f"• {attr}")
@@ -123,30 +150,34 @@ async def generate_closeout_pack(plan: ServicePlan) -> CloseoutPack:
 
     # 5. Build CCLI Usage Log
     ccli_log_lines = [
-        "| Date | Song Title | Artist / Author | CCLI Number | Usage Type | Status |",
+        "| Date | Song Title | Artist / Owner | CCLI Number | Usage Type | Status |",
         "| :--- | :--- | :--- | :--- | :--- | :--- |"
     ]
     for s in plan.songs:
         ccli_num = s.verdict.ccli_number if s.verdict and s.verdict.ccli_number else "N/A"
         owner = s.verdict.owner if s.verdict and s.verdict.owner else (s.artist_or_source or "Traditional")
         status_val = s.verdict.legal_status.value if s.verdict else "reported"
-        ccli_log_lines.append(f"| {today_str} | {s.title} | {owner} | {ccli_num} | Streamed Performance | {status_val} |")
+        ccli_log_lines.append(f"| {today_str} | {s.title} | {owner} | {ccli_num} | Streamed Live Performance | {status_val} |")
 
     ccli_usage_log = "\n".join(ccli_log_lines)
 
-    # 6. Build Dispute Pack
+    # 6. Build Multi-Platform Dispute Pack
     dispute_parts = [
-        "# YouTube Content ID Dispute Kit",
+        "# Statutory Multi-Platform Dispute Kit",
         f"Generated for: {plan.stream_title} ({today_str})",
         f"Licenses Held: {licenses_str}",
         "",
-        "If your livestream receives a copyright claim or automated mute, copy the relevant statement below into YouTube's dispute form (Select 'I have permission / license to use this content'):",
+        "If your broadcast receives an automated Content ID mute or claim, copy the relevant statement into the platform dispute portal:",
         ""
     ]
 
     for item in ai_draft.disputes:
-        dispute_parts.append(f"### Dispute Statement: {item.song_title}")
-        dispute_parts.append(f"> {item.dispute_paragraph}")
+        dispute_parts.append(f"## {item.song_title}")
+        dispute_parts.append(f"**YouTube Content ID Dispute:**")
+        dispute_parts.append(f"> {item.youtube_dispute}")
+        dispute_parts.append("")
+        dispute_parts.append(f"**Facebook / Meta Rights Manager Appeal:**")
+        dispute_parts.append(f"> {item.facebook_dispute}")
         dispute_parts.append("")
 
     dispute_pack = "\n".join(dispute_parts)
@@ -179,21 +210,21 @@ def generate_closeout_markdown_document(pack: CloseoutPack, plan: ServicePlan) -
 
 ---
 
-## 2. YouTube Chapters
+## 2. Timestamped Chapters
 ```
 {pack.chapters_text}
 ```
 
 ---
 
-## 3. CCLI Usage Log (For Reporting Portal)
+## 3. CCLI Quarterly Reporting Log
 {pack.ccli_usage_log}
 
 ---
 
-## 4. YouTube Content ID Dispute Pack
+## 4. Multi-Platform Statutory Dispute Statements
 {pack.dispute_pack}
 
 ---
-*Generated by Selah — The Live Telecast Copilot for Church Media Volunteers.*
+*Generated by Selah Telecast Copilot — Live Church Broadcast Compliance Engine*
 """

@@ -117,19 +117,21 @@ flowchart TD
 
 ## 🖥️ Live Telecast Display Synchronization Architecture
 
-Selah uses the browser-native **`BroadcastChannel` API** for zero-latency local screen synchronization across multi-monitor control booths:
+Selah uses the browser-native **`BroadcastChannel` API** for zero-latency multi-monitor synchronization from a single booth machine. All operator console, sanctuary projector, OBS overlay, and stage monitor tabs run in the same browser instance and sync via in-memory IPC with no network round-trip:
+
+> **Scope Note:** `BroadcastChannel` is same-browser, same-origin only. This provides multi-monitor output from one control booth computer (the standard small-church setup). True multi-device sync across separate PCs (e.g., a dedicated projector machine) requires a network transport — the SSE stream endpoint (`/api/plan/{id}/stream`) already exists as the foundation for this roadmap feature.
 
 ```mermaid
 graph LR
-    subgraph "Control Booth Operator"
+    subgraph "Control Booth Machine (Single Browser)"
         Console["ConsolePage (/console)<br/>Space / Arrow Keys / Foot Pedal"]
     end
 
-    subgraph "Local IPC (0ms Latency)"
+    subgraph "Local IPC (0ms, Same-Origin)"
         BC["BroadcastChannel('selah_stream')"]
     end
 
-    subgraph "Broadcast & Sanctuary Displays"
+    subgraph "Multi-Monitor Outputs (Same Machine)"
         OBS_Full["OutputPage (/output)<br/>Sanctuary Projector (16:9)"]
         OBS_Lower["OutputPage (/output?mode=lower-third)<br/>OBS Transparent Chroma/Alpha Overlay"]
         Stage_HUD["StagePage (/stage)<br/>Musician Confidence Monitor + Clock"]

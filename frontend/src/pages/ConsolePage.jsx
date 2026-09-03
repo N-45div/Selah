@@ -26,6 +26,8 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
   const [isEnding, setIsEnding] = useState(false);
   const [isBlackout, setIsBlackout] = useState(false);
   const [isAudioMutedSafe, setIsAudioMutedSafe] = useState(false);
+  const [showMultiView, setShowMultiView] = useState(true);
+
 
   // Flatten all slides
   const allSlides = useMemo(() => {
@@ -359,6 +361,16 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
               </button>
             )}
 
+            <button
+              type="button"
+              className={`btn ${showMultiView ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setShowMultiView(!showMultiView)}
+              title="Toggle Live 3-Screen Broadcast Studio Multi-View (Projector + OBS Lower-Third + Stage HUD)"
+            >
+              <Tv size={16} />
+              <span>{showMultiView ? 'Hide Studio Multi-View' : '📺 Live Studio Multi-View'}</span>
+            </button>
+
             <a
               href="/output"
               target="_blank"
@@ -408,6 +420,92 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
             )}
           </div>
         </div>
+
+        {/* Live 3-Screen Studio Multi-View (Projector + OBS Lower-Third + Stage HUD) */}
+        {showMultiView && (
+          <div style={{ marginTop: '1.2rem', padding: '1.2rem', background: '#0e0d0c', borderRadius: '12px', border: '1px solid #38342c', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem', borderBottom: '1px solid #262420', paddingBottom: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#4e8a66', animation: 'pulse 1.5s infinite' }} />
+                <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#f5f2eb', letterSpacing: '0.04em' }}>
+                  STUDIO MULTI-VIEW • 0ms Local BroadcastChannel IPC Synchronization
+                </span>
+              </div>
+              <span style={{ fontSize: '0.75rem', color: '#b8b2a5', background: '#262420', padding: '0.2rem 0.6rem', borderRadius: '4px' }}>
+                3 Displays Synchronized
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+              {/* Screen 1: Sanctuary Projector */}
+              <div style={{ background: '#171614', borderRadius: '8px', border: '1px solid #2e2c26', overflow: 'hidden' }}>
+                <div style={{ padding: '0.4rem 0.8rem', background: '#22201c', fontSize: '0.75rem', fontWeight: 600, color: '#d4912a', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>1. Sanctuary Projector (16:9)</span>
+                  <span>1080p</span>
+                </div>
+                <div style={{ height: '140px', padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', opacity: isBlackout ? 0.2 : 1 }}>
+                  {currentSlide ? (
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-serif)', fontSize: '0.95rem', fontWeight: 600, color: '#ffffff', lineHeight: 1.3 }}>
+                        {currentSlide.lines?.slice(0, 2).map((l, i) => <div key={i}>{l}</div>)}
+                      </div>
+                      {currentSlide.transliteration?.length > 0 && (
+                        <div style={{ fontSize: '0.78rem', color: '#d4912a', fontStyle: 'italic', marginTop: '0.3rem' }}>
+                          {currentSlide.transliteration[0]}
+                        </div>
+                      )}
+                    </div>
+                  ) : <span style={{ color: '#666' }}>No slide</span>}
+                </div>
+              </div>
+
+              {/* Screen 2: OBS Transparent Lower-Third */}
+              <div style={{ background: 'linear-gradient(135deg, #1f2937 0%, #111827 100%)', borderRadius: '8px', border: '1px solid #374151', overflow: 'hidden', position: 'relative' }}>
+                <div style={{ padding: '0.4rem 0.8rem', background: 'rgba(0,0,0,0.6)', fontSize: '0.75rem', fontWeight: 600, color: '#4e8a66', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>2. OBS / vMix Lower-Third Overlay</span>
+                  <span>Alpha Channel</span>
+                </div>
+                <div style={{ height: '140px', padding: '0.8rem', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', opacity: isBlackout ? 0.2 : 1 }}>
+                  {currentSlide ? (
+                    <div style={{ background: 'rgba(10, 10, 9, 0.92)', borderLeft: '4px solid #4e8a66', padding: '0.5rem 0.8rem', borderRadius: '6px', backdropFilter: 'blur(4px)' }}>
+                      <div style={{ fontSize: '0.65rem', color: '#d4912a', fontWeight: 700, textTransform: 'uppercase' }}>
+                        {currentSlide.song_title || 'Worship'}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-serif)', fontSize: '0.82rem', fontWeight: 600, color: '#fff', lineHeight: 1.2 }}>
+                        {currentSlide.lines?.[0]}
+                      </div>
+                    </div>
+                  ) : <span style={{ color: '#666', textAlign: 'center' }}>Lower Third Standby</span>}
+                </div>
+              </div>
+
+              {/* Screen 3: Musician Stage HUD */}
+              <div style={{ background: '#0a0a09', borderRadius: '8px', border: '1px solid #38342c', overflow: 'hidden' }}>
+                <div style={{ padding: '0.4rem 0.8rem', background: '#1c1b18', fontSize: '0.75rem', fontWeight: 600, color: '#f0c56e', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>3. Stage Musician HUD</span>
+                  <span style={{ color: '#f08e84' }}>● LIVE CLOCK</span>
+                </div>
+                <div style={{ height: '140px', padding: '0.8rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', opacity: isBlackout ? 0.2 : 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.7rem', color: '#f0c56e', fontWeight: 700 }}>
+                      [{currentSlide?.label || 'VERSE'}]
+                    </span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#f5f2eb', fontVariantNumeric: 'tabular-nums' }}>
+                      {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-serif)', fontSize: '0.88rem', fontWeight: 600, color: '#ffffff', lineHeight: 1.2 }}>
+                    {currentSlide?.lines?.[0] || 'Awaiting lyrics...'}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#b8b2a5', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderTop: '1px dashed #333', paddingTop: '0.2rem' }}>
+                    <strong style={{ color: '#f0c56e' }}>NEXT:</strong> {nextSlide?.lines?.[0] || '(End of Song)'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
 
         {/* Telemetry Progress Bar */}
         <div className="telemetry-progress-container">

@@ -358,15 +358,19 @@ export default function PreparePage({ plan, setPlan }) {
         <div>
           {/* Go Live Guard Alert */}
           {plan?.songs?.length > 0 && (
-            <div className={`guard-banner ${blockingSongs.length === 0 ? 'clean' : ''}`}>
+            <div className={`guard-banner ${!allResearchDone ? '' : blockingSongs.length === 0 ? 'clean' : ''}`}>
               <div>
                 <strong style={{ display: 'block', fontSize: '0.95rem' }}>
-                  {blockingSongs.length === 0
+                  {!allResearchDone
+                    ? '🔄 Autonomous Research In Progress...'
+                    : blockingSongs.length === 0
                     ? '✓ Pre-Broadcast Rights Verified'
                     : `⚠️ ${blockingSongs.length} song${blockingSongs.length > 1 ? 's need' : ' needs'} a decision`}
                 </strong>
                 <span style={{ fontSize: '0.82rem' }}>
-                  {blockingSongs.length === 0
+                  {!allResearchDone
+                    ? 'Research is still running. The Go-Live guard will not clear until all songs are evaluated.'
+                    : blockingSongs.length === 0
                     ? 'All songs are covered or resolved. You are cleared for live broadcast.'
                     : 'Resolve red/unknown songs below before going live to protect against Content ID mutes.'}
                 </span>

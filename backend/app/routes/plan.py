@@ -19,54 +19,61 @@ from ..services.gemini_client import GeminiQuotaExhaustedError
 router = APIRouter(prefix="/api/plan", tags=["Plan"])
 
 
+_RESEARCH_GATE = asyncio.Semaphore(1)
+
+
 async def _run_licensing_research_background(plan_id: str):
     """
-    Background worker that researches all songs in a plan concurrently and updates the store as they complete.
+    Background worker that researches songs sequentially via _RESEARCH_GATE to prevent process-global
+    key collision and stay comfortably under the 5 RPM/project rate limit.
     """
     plan = await get_plan(plan_id)
     if not plan:
         return
 
     async def _research_one(song: Song):
-        song.research_status = "researching"
-        # Save researching status immediately so frontend sees it
-        current = await get_plan(plan_id)
-        if current:
-            for idx, s in enumerate(current.songs):
-                if s.index == song.index:
-                    current.songs[idx].research_status = "researching"
-                    break
-            await save_plan(current)
+        async with _RESEARCH_GATE:
+            song.research_status = "researching"
+            # Save researching status immediately so frontend sees it
+            current = await get_plan(plan_id)
+            if current:
+                for idx, s in enumerate(current.songs):
+                    if s.index == song.index:
+                        current.songs[idx].research_status = "researching"
+                        break
+                await save_plan(current)
 
-        try:
-            verdict = await research_song(
-                title=song.title,
-                artist_or_source=song.artist_or_source,
-                licenses_held=plan.licenses_held,
-                language=song.language
-            )
-            song.verdict = verdict
-            song.research_status = "done"
-        except GeminiQuotaExhaustedError as qe:
-            print(f"Gemini quota exhausted researching {song.title}: {qe}")
-            song.research_status = "error"
-            song.error_message = "Gemini quota exhausted — retry after midnight PT"
-        except Exception as e:
-            print(f"Error researching {song.title}: {e}")
-            song.research_status = "error"
-            song.error_message = str(e)
+            try:
+                verdict = await research_song(
+                    title=song.title,
+                    artist_or_source=song.artist_or_source,
+                    licenses_held=plan.licenses_held,
+                    language=song.language
+                )
+                song.verdict = verdict
+                song.research_status = "done"
+            except GeminiQuotaExhaustedError as qe:
+                print(f"Gemini quota exhausted researching {song.title}: {qe}")
+                song.research_status = "error"
+                song.error_message = "Gemini quota exhausted — retry after midnight PT"
+            except Exception as e:
+                print(f"Error researching {song.title}: {e}")
+                song.research_status = "error"
+                song.error_message = str(e)
+            finally:
+                # Update and save plan progressively so frontend poll catches it
+                current_plan = await get_plan(plan_id)
+                if current_plan:
+                    for idx, s in enumerate(current_plan.songs):
+                        if s.index == song.index:
+                            current_plan.songs[idx] = song
+                            break
+                    await save_plan(current_plan)
+                await asyncio.sleep(2)  # spacing so the next song starts a fresh rate window
 
-        # Update and save plan progressively so frontend poll catches it
-        current_plan = await get_plan(plan_id)
-        if current_plan:
-            for idx, s in enumerate(current_plan.songs):
-                if s.index == song.index:
-                    current_plan.songs[idx] = song
-                    break
-            await save_plan(current_plan)
-
-    # Launch all research tasks concurrently
+    # Launch research tasks (serialized cleanly by semaphore)
     await asyncio.gather(*[_research_one(s) for s in plan.songs])
+
 
 
 @router.post("")

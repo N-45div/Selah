@@ -44,6 +44,17 @@ def _rotate_client() -> Optional[genai.Client]:
     return client
 
 
+def next_api_key() -> str:
+    """Round-robin the pool. Used by ADK, which sets process-global GOOGLE_API_KEY."""
+    global _key_index
+    if not _KEY_POOL:
+        raise GeminiQuotaExhaustedError("No Gemini API keys configured.")
+    k = _KEY_POOL[_key_index % len(_KEY_POOL)]
+    _key_index += 1
+    return k
+
+
+
 class GeminiQuotaExhaustedError(Exception):
     """Raised when all keys in the pool have been exhausted (429/RESOURCE_EXHAUSTED)."""
     pass

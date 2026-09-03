@@ -1,3 +1,4 @@
+import os
 import json
 import re
 import asyncio
@@ -6,7 +7,7 @@ from google.adk import Agent
 from google.adk.runners import InMemoryRunner
 from ..models import SongVerdict, LegalStatus, ContentIdRisk, Source
 from ..services.parallel_client import search_licensing_web, async_research_licensing_deep
-from ..services.gemini_client import generate_structured
+from ..services.gemini_client import generate_structured, next_api_key
 from ..config import GEMINI_MODEL
 
 
@@ -52,15 +53,8 @@ async def research_song(
     """
     Autonomous research agent combining Google ADK runner with Parallel Search,
     with direct Parallel deep-search fallback for resilience.
+    Rotates process-global GOOGLE_API_KEY from project pool before each ADK run.
     """
-    agent = Agent(
-        name="LicensingAgent",
-        model=GEMINI_MODEL,
-        description="Autonomous copyright research agent using Parallel Search tool",
-        instruction=LICENSING_AGENT_INSTRUCTION,
-        tools=[search_licensing_web]
-    )
-
     request_prompt = f"""
     Please research the following worship song/hymn:
     - Song Title: "{title}"
@@ -78,10 +72,25 @@ async def research_song(
     """
 
     final_text = ""
-    max_retries = 2
+    max_retries = 4
 
     for attempt in range(max_retries):
+        # Rotate key from the project pool BEFORE constructing the agent/runner
+        try:
+            current_key = next_api_key()
+            os.environ["GOOGLE_API_KEY"] = current_key
+        except Exception as e:
+            print(f"Key rotation notice: {e}")
+
+        agent = Agent(
+            name="LicensingAgent",
+            model=GEMINI_MODEL,
+            description="Autonomous copyright research agent using Parallel Search tool",
+            instruction=LICENSING_AGENT_INSTRUCTION,
+            tools=[search_licensing_web]
+        )
         runner = InMemoryRunner(agent=agent)
+
         try:
             events = await runner.run_debug(request_prompt, quiet=True)
             for event in reversed(events):
@@ -96,9 +105,15 @@ async def research_song(
             if final_text:
                 break
         except Exception as e:
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e) or "503" in str(e):
-                wait_time = 6.0 * (attempt + 1)
-                print(f"[ADK Rate/Demand Notice] Backing off {wait_time}s on '{title}'...")
+            err_str = str(e)
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "503" in err_str:
+                # Parse retryDelay from Google API response if available
+                delay_match = re.search(r"retryDelay[\"']?\s*:\s*[\"']?(\d+(?:\.\d+)?)s?", err_str)
+                if delay_match:
+                    wait_time = float(delay_match.group(1)) + 1.0
+                else:
+                    wait_time = 35.0 + (attempt * 5.0)
+                print(f"[ADK Rate/RPM Notice] Rotating key pool & backing off {wait_time:.1f}s on '{title}' (attempt {attempt + 1}/{max_retries})...")
                 await asyncio.sleep(wait_time)
             else:
                 if attempt == max_retries - 1:
@@ -189,15 +204,16 @@ async def research_setlist_concurrently(
     licenses_held: List[str]
 ) -> List[SongVerdict]:
     """
-    Research all songs concurrently using asyncio.gather.
+    Research all songs sequentially with rate limiting.
     """
-    tasks = [
-        research_song(
+    results = []
+    for item in songs_data:
+        verdict = await research_song(
             title=item.get("title", ""),
             artist_or_source=item.get("artist_or_source", ""),
             licenses_held=licenses_held,
             language=item.get("language", "English")
         )
-        for item in songs_data
-    ]
-    return await asyncio.gather(*tasks)
+        results.append(verdict)
+        await asyncio.sleep(2)
+    return results

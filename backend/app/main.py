@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from .config import root_dir
 from .routes import plan, console, closeout
@@ -13,11 +13,12 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware
+# CORS middleware — allow_credentials=True is invalid with allow_origins=["*"] per spec.
+# For a public demo, wildcard origin without credentials is correct.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -45,9 +46,17 @@ async def health_check():
     }
 
 
-# Catch-all SPA route to serve Vite React index.html
+# Catch-all SPA route — MUST NOT swallow /api/ routes.
+# Only serves index.html for non-API, non-asset paths.
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
+    # Never serve HTML for API routes — return proper 404 JSON
+    if full_path.startswith("api/") or full_path.startswith("api"):
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"API endpoint '/{full_path}' not found."}
+        )
+
     index_file = dist_dir / "index.html"
     if index_file.exists():
         return FileResponse(str(index_file))

@@ -14,6 +14,7 @@ from ..agents.setlist_agent import (
 from ..agents.licensing_agent import research_song
 from ..agents.pack_agent import generate_pack_for_setlist
 from ..services.pptx_exporter import generate_pptx_deck
+from ..services.gemini_client import GeminiQuotaExhaustedError
 
 router = APIRouter(prefix="/api/plan", tags=["Plan"])
 
@@ -27,6 +28,16 @@ async def _run_licensing_research_background(plan_id: str):
         return
 
     async def _research_one(song: Song):
+        song.research_status = "researching"
+        # Save researching status immediately so frontend sees it
+        current = await get_plan(plan_id)
+        if current:
+            for idx, s in enumerate(current.songs):
+                if s.index == song.index:
+                    current.songs[idx].research_status = "researching"
+                    break
+            await save_plan(current)
+
         try:
             verdict = await research_song(
                 title=song.title,
@@ -36,6 +47,10 @@ async def _run_licensing_research_background(plan_id: str):
             )
             song.verdict = verdict
             song.research_status = "done"
+        except GeminiQuotaExhaustedError as qe:
+            print(f"Gemini quota exhausted researching {song.title}: {qe}")
+            song.research_status = "error"
+            song.error_message = "Gemini quota exhausted — retry after midnight PT"
         except Exception as e:
             print(f"Error researching {song.title}: {e}")
             song.research_status = "error"
@@ -175,6 +190,9 @@ async def retry_song(plan_id: str, song_index: int):
             )
             target_song.verdict = verdict
             target_song.research_status = "done"
+        except GeminiQuotaExhaustedError as qe:
+            target_song.research_status = "error"
+            target_song.error_message = "Gemini quota exhausted — retry after midnight PT"
         except Exception as e:
             target_song.research_status = "error"
             target_song.error_message = str(e)

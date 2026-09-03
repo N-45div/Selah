@@ -81,13 +81,15 @@ class ServicePlan(BaseModel):
 
     @property
     def blocking_songs(self) -> List[Song]:
-        """Songs whose verdict is needs_license or unknown and haven't been resolved yet."""
+        """Songs that block going live: unresolved needs_license/unknown, errors, or still researching."""
         blocking = []
         for s in self.songs:
             if s.verdict and s.verdict.legal_status in (LegalStatus.NEEDS_LICENSE, LegalStatus.UNKNOWN):
                 if not s.resolution:
                     blocking.append(s)
             elif s.research_status == "error" and not s.resolution:
+                blocking.append(s)
+            elif s.research_status in ("pending", "researching") and not s.resolution:
                 blocking.append(s)
         return blocking
 

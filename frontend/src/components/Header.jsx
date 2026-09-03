@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { NavLink, Link } from 'react-router-dom';
-import { Radio, ShieldCheck, Tv, FileText, ExternalLink, Moon, Sun, Monitor } from 'lucide-react';
+import React, { useState } from 'react';
+import { NavLink, Link, useLocation } from 'react-router-dom';
+import { Radio, ShieldCheck, Tv, FileText, ExternalLink, Moon, Sun, Monitor, Home, Sparkles } from 'lucide-react';
 
 export default function Header({ currentPlan, streamStatus }) {
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const location = useLocation();
 
   const isLive = streamStatus === 'live' || (currentPlan && currentPlan.status === 'live');
   const isEnded = streamStatus === 'ended' || (currentPlan && currentPlan.status === 'ended');
@@ -24,51 +25,63 @@ export default function Header({ currentPlan, streamStatus }) {
   return (
     <header className="app-header">
       <Link to="/" className="logo-area">
-        <span className="brand-icon">🕊️</span>
+        <div className="brand-icon-wrapper">
+          <span className="brand-icon">🕊️</span>
+        </div>
         <div>
-          <h1 className="brand-title">Selah</h1>
-          <p className="brand-tagline">Live Telecast Copilot for Church Media</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <h1 className="brand-title">Selah</h1>
+            <span className="brand-version-pill">COPILOT</span>
+          </div>
+          <p className="brand-tagline">Live Telecast & Rights Intelligence</p>
         </div>
       </Link>
 
       <nav className="header-nav">
         <NavLink to="/" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} end>
-          <ShieldCheck size={17} />
+          <Home size={16} />
+          <span>Home</span>
+        </NavLink>
+
+        <NavLink to="/prepare" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+          <ShieldCheck size={16} />
           <span>1. Prepare & License</span>
         </NavLink>
 
         <NavLink to="/console" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-          <Radio size={17} />
+          <Radio size={16} />
           <span>2. Live Console</span>
         </NavLink>
 
         <NavLink to="/closeout" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-          <FileText size={17} />
-          <span>3. Close-Out & Pack</span>
+          <FileText size={16} />
+          <span>3. Close-Out</span>
         </NavLink>
+
+        <div className="nav-divider" />
 
         <a 
           href="/output" 
           target="_blank" 
           rel="noopener noreferrer" 
-          className="nav-link"
+          className="nav-link nav-link-external"
           title="Open OBS / vMix Output Window"
         >
-          <Tv size={17} />
-          <span>OBS Output</span>
-          <ExternalLink size={13} style={{ opacity: 0.7 }} />
+          <Tv size={15} />
+          <span>OBS Feed</span>
+          <ExternalLink size={12} style={{ opacity: 0.6 }} />
         </a>
 
         <a 
           href="/stage" 
           target="_blank" 
           rel="noopener noreferrer" 
-          className="nav-link"
-          title="Open Stage Confidence Monitor"
+          className="nav-link nav-link-external"
+          title="Open Stage Confidence Monitor for vocalists"
         >
-          <Monitor size={17} color="var(--amber-accent)" />
-          <span>Stage Monitor</span>
-          <ExternalLink size={13} style={{ opacity: 0.7 }} />
+          <Monitor size={15} color="var(--amber-accent)" />
+          <span>Stage HUD</span>
+          <ExternalLink size={12} style={{ opacity: 0.6 }} />
         </a>
       </nav>
 
@@ -79,21 +92,21 @@ export default function Header({ currentPlan, streamStatus }) {
           onClick={toggleTheme}
           title="Toggle Studio Dark Booth Mode"
         >
-          {isDarkMode ? <><Sun size={14} color="#f0c56e" /> Paper</> : <><Moon size={14} /> Studio Dark</>}
+          {isDarkMode ? <><Sun size={14} color="#f0c56e" /> Paper Mode</> : <><Moon size={14} /> Studio Dark</>}
         </button>
 
         {isLive ? (
           <span className="status-badge status-live">
             <span className="pulse-dot"></span>
-            Live On Air
+            LIVE ON AIR
           </span>
         ) : isEnded ? (
           <span className="status-badge status-ended">
-            ✓ Broadcast Ended
+            ✓ ENDED
           </span>
         ) : (
           <span className="status-badge status-draft">
-            Draft Setup
+            DRAFT
           </span>
         )}
       </div>

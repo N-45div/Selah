@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Header from './components/Header';
+import LandingPage from './pages/LandingPage';
 import PreparePage from './pages/PreparePage';
 import ConsolePage from './pages/ConsolePage';
 import OutputPage from './pages/OutputPage';
@@ -20,6 +21,10 @@ function AppLayout({ plan, setPlan, streamStatus, setStreamStatus }) {
         <Routes>
           <Route
             path="/"
+            element={<LandingPage setPlan={setPlan} />}
+          />
+          <Route
+            path="/prepare"
             element={<PreparePage plan={plan} setPlan={setPlan} />}
           />
           <Route

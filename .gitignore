@@ -47,7 +47,12 @@ frontend/dist/
 Thumbs.db
 *.log
 
-# Internal Dossiers
+# Internal Dossiers & Demo Production
 SELAH_MASTER_RESEARCH_AND_CODE_REVIEW.md
+demo_artifacts/
+*.mp4
+*.webm
+scripts/record_demo_video.py
+
 
 

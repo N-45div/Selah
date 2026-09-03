@@ -27,6 +27,21 @@ def get_async_parallel_client() -> Optional[AsyncParallel]:
     return _async_parallel_client
 
 
+def _demojibake(s: str) -> str:
+    """Repair UTF-8 double-encoding artifacts (e.g. © → Â©)."""
+    if not s:
+        return s
+    try:
+        return s.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return s
+
+
+def _clean_text(s: str) -> str:
+    """Apply demojibake repair and strip whitespace."""
+    return _demojibake(s).strip() if s else s
+
+
 def search_licensing_web(objective: str, search_queries: List[str], mode: str = "fast") -> Dict[str, Any]:
     """
     Synchronous search tool for Google ADK Agent integration.
@@ -53,14 +68,15 @@ def search_licensing_web(objective: str, search_queries: List[str], mode: str = 
         raw_results = getattr(search_response, "results", []) or []
 
         for item in raw_results:
-            title = getattr(item, "title", "Untitled") or "Untitled"
+            title = _clean_text(getattr(item, "title", "Untitled") or "Untitled")
             url = getattr(item, "url", "") or ""
             raw_excerpts = getattr(item, "excerpts", []) or []
 
             trimmed_excerpts = []
             for exc in raw_excerpts[:3]:
                 if exc:
-                    trimmed = exc[:900] + ("..." if len(exc) > 900 else "")
+                    cleaned = _clean_text(exc)
+                    trimmed = cleaned[:900] + ("..." if len(cleaned) > 900 else "")
                     trimmed_excerpts.append(trimmed)
 
             publish_date = getattr(item, "publish_date", None)
@@ -127,7 +143,7 @@ async def async_research_licensing_deep(
                 extract_res = await async_client.extract(
                     urls=[top_url],
                     objective=f"Extract exact copyright notice line, author names, year, and CCLI ID for '{title}'",
-                    excerpts=True
+                    max_chars_total=2000
                 )
                 extractions = getattr(extract_res, "results", []) or []
             except Exception as extract_err:

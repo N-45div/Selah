@@ -1,40 +1,52 @@
 import asyncio
-import time
 import os
 from typing import Type, TypeVar, Optional, Any, List, Union
 from pydantic import BaseModel
 from google import genai
 from google.genai import types
 from google.genai.errors import ClientError, ServerError, APIError
-from ..config import GEMINI_API_KEY, GEMINI_MODEL
+from ..config import GEMINI_API_KEY, GEMINI_API_KEYS, GEMINI_MODEL
 
 T = TypeVar("T", bound=BaseModel)
 
-# Key pool supporting primary + backup keys for maximum throughput
-_KEY_POOL = [
-    "YOUR_GEMINI_API_KEY",
-    "YOUR_GEMINI_BACKUP_KEY"
-]
+# ── Key pool: built entirely from environment variables, never hardcoded ──
+_KEY_POOL: List[str] = [k.strip() for k in GEMINI_API_KEYS.split(",") if k.strip()]
 if GEMINI_API_KEY and GEMINI_API_KEY not in _KEY_POOL:
     _KEY_POOL.insert(0, GEMINI_API_KEY)
+
+if not _KEY_POOL:
+    print("WARNING: No Gemini API keys configured. Set GEMINI_API_KEY or GEMINI_API_KEYS env vars.")
 
 _clients: List[genai.Client] = []
 _key_index = 0
 
 
-def _get_client() -> Optional[genai.Client]:
-    global _clients, _key_index
-    if not _clients:
-        for k in _KEY_POOL:
-            try:
-                _clients.append(genai.Client(api_key=k))
-            except Exception as e:
-                print(f"Warning: Failed to init client for key: {e}")
+def _init_clients():
+    """Lazily initialize client pool from key pool."""
+    global _clients
+    if _clients:
+        return
+    for k in _KEY_POOL:
+        try:
+            _clients.append(genai.Client(api_key=k))
+        except Exception as e:
+            print(f"Warning: Failed to init Gemini client for key ending ...{k[-6:]}: {e}")
+
+
+def _rotate_client() -> Optional[genai.Client]:
+    """Return the next client in round-robin order."""
+    global _key_index
+    _init_clients()
     if not _clients:
         return None
     client = _clients[_key_index % len(_clients)]
     _key_index += 1
     return client
+
+
+class GeminiQuotaExhaustedError(Exception):
+    """Raised when all keys in the pool have been exhausted (429/RESOURCE_EXHAUSTED)."""
+    pass
 
 
 async def generate_structured(
@@ -46,7 +58,9 @@ async def generate_structured(
     max_retries: int = 6
 ) -> T:
     """
-    Generate structured output using google-genai with multi-key pool and 429/503 automatic backoff.
+    Generate structured output using google-genai with multi-key pool rotation.
+    On 429/RESOURCE_EXHAUSTED: rotates to next key immediately (no sleep),
+    only backs off once ALL keys have been tried in the current round.
     """
     target_model = model or GEMINI_MODEL or "gemini-3.5-flash"
 
@@ -58,11 +72,13 @@ async def generate_structured(
     )
 
     loop = asyncio.get_running_loop()
+    pool_size = max(len(_KEY_POOL), 1)
+    consecutive_429s = 0
 
     for attempt in range(max_retries):
-        client = _get_client()
+        client = _rotate_client()
         if not client:
-            raise ValueError("No valid Gemini client available.")
+            raise GeminiQuotaExhaustedError("No valid Gemini API keys configured.")
 
         try:
             def _call():
@@ -73,6 +89,7 @@ async def generate_structured(
                 )
 
             response = await loop.run_in_executor(None, _call)
+            consecutive_429s = 0  # Reset on success
 
             if hasattr(response, "parsed") and response.parsed is not None:
                 if isinstance(response.parsed, schema):
@@ -87,19 +104,28 @@ async def generate_structured(
         except (ClientError, ServerError, APIError) as api_err:
             err_str = str(api_err)
             if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "503" in err_str or "UNAVAILABLE" in err_str:
-                wait_time = 6.0 * (attempt + 1)
-                print(f"[Gemini Rate/Demand Backoff] Switching key pool & waiting {wait_time}s (attempt {attempt + 1}/{max_retries})...")
-                await asyncio.sleep(wait_time)
+                consecutive_429s += 1
+                key_suffix = f"...{_KEY_POOL[(_key_index - 1) % pool_size][-6:]}" if _KEY_POOL else "?"
+                print(f"[Gemini 429] Key {key_suffix} exhausted, rotating (attempt {attempt + 1}/{max_retries}, consecutive={consecutive_429s})")
+                # Only sleep after we've tried every key in the pool
+                if consecutive_429s >= pool_size:
+                    consecutive_429s = 0
+                    print(f"[Gemini] All {pool_size} keys exhausted this round. Backing off 10s...")
+                    await asyncio.sleep(10.0)
+                # Otherwise rotate immediately, no sleep
             else:
                 if attempt == max_retries - 1:
                     raise api_err
-                await asyncio.sleep(3.0)
+                await asyncio.sleep(2.0)
         except Exception as e:
             if attempt == max_retries - 1:
                 raise e
-            await asyncio.sleep(3.0)
+            await asyncio.sleep(2.0)
 
-    raise ValueError("Max retries exceeded for Gemini generate_structured.")
+    raise GeminiQuotaExhaustedError(
+        f"All {pool_size} Gemini API keys exhausted after {max_retries} attempts. "
+        "Quota resets at midnight Pacific Time."
+    )
 
 
 async def generate_text(
@@ -110,7 +136,7 @@ async def generate_text(
     max_retries: int = 6
 ) -> str:
     """
-    Generate plain text with multi-key pool rotation and backoff.
+    Generate plain text with multi-key pool rotation and immediate key-switch on 429.
     """
     target_model = model or GEMINI_MODEL or "gemini-3.5-flash"
 
@@ -120,11 +146,13 @@ async def generate_text(
     )
 
     loop = asyncio.get_running_loop()
+    pool_size = max(len(_KEY_POOL), 1)
+    consecutive_429s = 0
 
     for attempt in range(max_retries):
-        client = _get_client()
+        client = _rotate_client()
         if not client:
-            raise ValueError("No valid Gemini client available.")
+            raise GeminiQuotaExhaustedError("No valid Gemini API keys configured.")
 
         try:
             def _call():
@@ -139,16 +167,20 @@ async def generate_text(
         except (ClientError, ServerError, APIError) as api_err:
             err_str = str(api_err)
             if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "503" in err_str or "UNAVAILABLE" in err_str:
-                wait_time = 6.0 * (attempt + 1)
-                print(f"[Gemini Rate/Demand Backoff] Switching key pool & waiting {wait_time}s (attempt {attempt + 1}/{max_retries})...")
-                await asyncio.sleep(wait_time)
+                consecutive_429s += 1
+                key_suffix = f"...{_KEY_POOL[(_key_index - 1) % pool_size][-6:]}" if _KEY_POOL else "?"
+                print(f"[Gemini 429] Key {key_suffix} exhausted, rotating (attempt {attempt + 1}/{max_retries})")
+                if consecutive_429s >= pool_size:
+                    consecutive_429s = 0
+                    print(f"[Gemini] All {pool_size} keys exhausted this round. Backing off 10s...")
+                    await asyncio.sleep(10.0)
             else:
                 if attempt == max_retries - 1:
                     raise api_err
-                await asyncio.sleep(3.0)
+                await asyncio.sleep(2.0)
         except Exception as e:
             if attempt == max_retries - 1:
                 raise e
-            await asyncio.sleep(3.0)
+            await asyncio.sleep(2.0)
 
     return ""

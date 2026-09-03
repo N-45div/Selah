@@ -10,6 +10,7 @@ load_dotenv(backend_dir / ".env", override=True)
 load_dotenv(root_dir / ".env", override=True)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_KEYS = os.getenv("GEMINI_API_KEYS", "")  # Comma-separated pool
 PARALLEL_API_KEY = os.getenv("PARALLEL_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from ..models import (
     AdvanceRequest, ChapterRequest, ChapterMark
@@ -36,10 +36,11 @@ async def go_live(plan_id: str):
             detail=f"Cannot go live: {len(blocking_titles)} song(s) require human resolution: {', '.join(blocking_titles)}"
         )
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     plan.status = "live"
     if not plan.started_at:
         plan.started_at = now.isoformat()
+
 
     if not plan.chapters:
         plan.chapters.append(
@@ -124,8 +125,9 @@ async def end_stream(plan_id: str):
     _require_transition(plan, "ended")
 
     plan.status = "ended"
-    plan.ended_at = datetime.now().isoformat()
+    plan.ended_at = datetime.now(timezone.utc).isoformat()
     await save_plan(plan)
+
 
     # Generate closeout pack with attributions, CCLI log, chapters, and disputes
     closeout = await generate_closeout_pack(plan)

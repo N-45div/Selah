@@ -132,14 +132,23 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus, isHydratin
   useEffect(() => {
     if (plan?.status !== 'live' || !plan?.started_at) return;
 
-    const startTime = new Date(plan.started_at).getTime();
-    const timer = setInterval(() => {
+    // Normalize ISO timestamp so browsers parse it as UTC rather than local time
+    const raw = String(plan.started_at);
+    const isoString = (raw.endsWith('Z') || raw.includes('+') || (raw.length > 19 && raw.charAt(19) === '-'))
+      ? raw
+      : raw + 'Z';
+    const startTime = new Date(isoString).getTime();
+
+    const updateTimer = () => {
       const diff = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
       setElapsedSeconds(diff);
-    }, 1000);
+    };
 
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
     return () => clearInterval(timer);
   }, [plan?.status, plan?.started_at]);
+
 
   // Advance / Previous Slide Handler
   const handleGoToSlide = useCallback(

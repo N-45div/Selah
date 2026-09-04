@@ -77,7 +77,7 @@ Selah is built for the **Google Cloud "Agentic Cinema" Hackathon (Parallel Partn
                                             │     Act 3: Post-Broadcast Close-Out Pack     │
                                             │     [backend/app/agents/closeout_agent.py]   │
                                             │     • YouTube Description + CCLI Log         │
-                                            │     • Multi-Platform Statutory Dispute Kit   │
+                                            │     • Multi-Platform Content ID dispute statements │
                                             └──────────────────────────────────────────────┘
 ```
 
@@ -93,7 +93,7 @@ Selah is built for the **Google Cloud "Agentic Cinema" Hackathon (Parallel Partn
    - [`backend/app/services/gemini_client.py`](backend/app/services/gemini_client.py) — Multi-key rotation pool and structured Pydantic schema validation.
    - [`backend/app/agents/setlist_agent.py`](backend/app/agents/setlist_agent.py) — Multimodal OCR + text parsing.
    - [`backend/app/agents/pack_agent.py`](backend/app/agents/pack_agent.py) — Slide proofreading & Latin transliteration for Indic scripts.
-   - [`backend/app/agents/closeout_agent.py`](backend/app/agents/closeout_agent.py) — Multi-platform compliance dossier and DMCA § 512(g) dispute statements.
+   - [`backend/app/agents/closeout_agent.py`](backend/app/agents/closeout_agent.py) — Multi-platform compliance dossier and Content ID dispute statements.
 3. **Parallel Search SDK (`parallel-web` 1.3.0)**:
    - [`backend/app/services/parallel_client.py`](backend/app/services/parallel_client.py) — Calls `Parallel(api_key).search()` with objective-driven search queries and trimmed citations (~900 chars).
 4. **No Non-Google AI**: 100% powered by Gemini (`gemini-3.5-flash`). Zero OpenAI, Anthropic, or third-party AI audio-fingerprinting dependencies.
@@ -120,7 +120,7 @@ Selah is built for the **Google Cloud "Agentic Cinema" Hackathon (Parallel Partn
 ### Act 3: Post-Broadcast Compliance & Dispute Defense
 - **YouTube Metadata & Attributions**: Pre-formatted description with mandatory CCLI license attributions and 0:00-indexed timestamp chapters.
 - **Quarterly CCLI Audit Table**: Ready-to-copy markdown table formatted for church administrative reporting.
-- **Multi-Platform Statutory Dispute Kit**: Pre-drafted DMCA § 512(g) counter-notices and Meta / Facebook Rights Manager appeals with grounded web citations.
+- **Content ID Dispute Kit**: Pre-drafted YouTube Content ID and Meta / Facebook Rights Manager dispute statements with grounded web citations.
 - **1-Click Markdown Download**: Export the entire compliance pack as a standalone `.md` document.
 
 ---

@@ -34,7 +34,7 @@ graph TD
         CloseoutAgent --> YT_Desc["YouTube Description with CCLI Attribution"]
         CloseoutAgent --> Chapters["Timestamped YouTube Chapter Markers"]
         CloseoutAgent --> CCLI_Log["Quarterly CCLI Usage Reporting Log"]
-        CloseoutAgent --> DisputeKit["Multi-Platform Dispute Kit (DMCA § 512(g) & Meta Appeals)"]
+        CloseoutAgent --> DisputeKit["Multi-Platform Dispute Kit (Content ID & Meta Appeals)"]
     end
 ```
 
@@ -158,7 +158,7 @@ graph TD
     Comp2 --> CCLI_Out["• Markdown / CSV Log<br/>• Date, Title, CCLI #, Usage Type"]
 
     CloseoutGen --> Comp3["Multi-Platform Dispute Kit"]
-    Comp3 --> Dispute_Out["• YouTube Content ID Counter-Notice (DMCA § 512(g))<br/>• Meta / Facebook Rights Manager Appeal Statement<br/>• CCLI Streaming License Verification Bundle"]
+    Comp3 --> Dispute_Out["• YouTube Content ID Dispute Statement<br/>• Meta / Facebook Rights Manager Appeal Statement<br/>• CCLI Streaming License Verification Bundle"]
 ```
 
 ---

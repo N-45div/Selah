@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from ..models import ServicePlan, CloseoutPack
+from ..models import ServicePlan, CloseoutPack, LegalStatus
 from ..services.gemini_client import generate_structured
 from pydantic import BaseModel, Field
 
@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 class DisputeItem(BaseModel):
     song_title: str
     youtube_dispute: str = Field(
-        description="Formal, ready-to-paste statement for YouTube Content ID dispute citing CCLI Streaming License, CCLI SongSelect ID, and live church performance rights"
+        description="Ready-to-paste dispute statement. Cite an active streaming licence ONLY if one is listed in Licenses Held and the song's legal_status is 'covered'; for public_domain cite public domain only."
     )
     facebook_dispute: str = Field(
         description="Concise statement for Meta / Facebook Rights Manager appeal"
@@ -24,12 +24,14 @@ CLOSEOUT_SYSTEM_INSTRUCTION = """
 You are Selah's Church Broadcast Close-Out Assistant.
 Your task is to generate post-broadcast compliance documentation across platforms (YouTube, Facebook Live, Twitch), including YouTube stream descriptions, CCLI usage logs, and multi-platform Content ID dispute statements.
 
-STATUTORY DISPUTE GUIDELINES:
+DISPUTE DRAFTING GUIDELINES:
 1. YouTube Content ID:
-   - For copyrighted songs covered by CCLI Streaming License: Cite 17 U.S.C. § 106/107, CCLI License Number, registered publisher, CCLI Song ID, and note that the church holds non-commercial live streaming synchronization rights.
-   - For public domain songs: State clearly that the musical composition and lyrics are in the Public Domain (published prior to 1929) and that this live broadcast is an original rendition, not a copyrighted master recording.
+   - For copyrighted songs covered by an active streaming licence: Cite the church's streaming licence, registered publisher, CCLI Song ID, and note that the church holds non-commercial live streaming synchronization rights under its licence agreement. Never cite 17 U.S.C. § 106 and never argue fair use under § 107.
+   - For public domain songs: State clearly that the musical composition and lyrics are in the Public Domain (first published 1930 or earlier in the US) and that this live broadcast is an original rendition, not a copyrighted master recording.
 2. Facebook / Meta Rights Manager:
-   - Provide a concise 2-sentence notice stating the church holds the active CCLI Streaming License covering this live telecast.
+   - Provide a concise statement citing the active church streaming licence covering this live telecast.
+3. STRICT COMPLIANCE RULE:
+   - If a song's legal_status is not 'covered' or 'public_domain', or if no streaming licence is listed in Licenses Held, you MUST NOT state that the church holds any streaming licence. Output: "DO NOT FILE — Selah could not confirm streaming coverage for '{song_title}'. Filing a dispute would assert a licence you may not hold. Confirm coverage with your licensing administrator."
 """
 
 
@@ -76,7 +78,13 @@ async def generate_closeout_pack(plan: ServicePlan) -> CloseoutPack:
             ccli = f" (CCLI #{s.verdict.ccli_number})" if s.verdict and s.verdict.ccli_number else ""
             attributions.append(f"{s.title} - {s.artist_or_source or 'Traditional'}{ccli}")
 
-    licenses_str = ", ".join(plan.licenses_held) if plan.licenses_held else "None recorded"
+    # Derive held streaming licenses
+    held_streaming = [l for l in plan.licenses_held if "streaming" in l.lower() or "onelicense" in l.lower()]
+    held_streaming_str = ", ".join(held_streaming) if held_streaming else "None"
+    all_licenses_str = ", ".join(plan.licenses_held) if plan.licenses_held else "None recorded"
+
+    def _is_covered(s) -> bool:
+        return bool(held_streaming) and s.verdict is not None and s.verdict.legal_status == LegalStatus.COVERED
 
     # 3. Use Gemini to draft dispute paragraphs and description blurb
     songs_context = []
@@ -95,7 +103,7 @@ async def generate_closeout_pack(plan: ServicePlan) -> CloseoutPack:
     Generate the closeout pack details for:
     - Service Name: "{plan.service_name}"
     - Stream Title: "{plan.stream_title}"
-    - Licenses Held: {licenses_str}
+    - Verified Streaming Licenses Held: {held_streaming_str}
     - Songs: {songs_context}
     """
 
@@ -112,12 +120,17 @@ async def generate_closeout_pack(plan: ServicePlan) -> CloseoutPack:
         for s in plan.songs:
             ccli_id = s.verdict.ccli_number if s.verdict and s.verdict.ccli_number else "Registered"
             owner_name = s.verdict.owner if s.verdict and s.verdict.owner else "Copyright Owner"
-            if s.verdict and s.verdict.legal_status.value == "public_domain":
-                yt_disp = f"The composition and lyrics of '{s.title}' are in the Public Domain (published prior to 1929). This broadcast is an original live church performance and does not infringe any sound recording copyright."
+            is_pd = s.verdict and s.verdict.legal_status == LegalStatus.PUBLIC_DOMAIN
+            if is_pd:
+                yt_disp = f"The composition and lyrics of '{s.title}' are in the Public Domain (first published 1930 or earlier in the US). This broadcast is an original live church performance and does not infringe any sound recording copyright."
                 fb_disp = f"Public Domain hymn '{s.title}' performed live by church congregation. No master recording copyright applies."
+            elif _is_covered(s):
+                yt_disp = f"This church holds an active streaming licence ({held_streaming_str}) covering '{s.title}' (CCLI SongSelect #{ccli_id}, Administered by {owner_name}). This is a live performance during a non-commercial religious service."
+                fb_disp = f"Covered under active church streaming licence ({held_streaming_str}) for '{s.title}' (CCLI #{ccli_id})."
             else:
-                yt_disp = f"This church holds an active CCLI Streaming License ({licenses_str}) granting synchronization and live digital transmission rights for '{s.title}' (CCLI SongSelect #{ccli_id}, Administered by {owner_name}). This is a non-commercial religious broadcast."
-                fb_disp = f"Covered under active church CCLI Streaming License for '{s.title}' (CCLI #{ccli_id})."
+                status_label = s.verdict.legal_status.value if s.verdict else 'unresearched'
+                yt_disp = f"DO NOT FILE — Selah could not confirm streaming coverage for '{s.title}' (status: {status_label}). Filing a dispute would assert a licence you may not hold. Confirm coverage with your licensing administrator before responding to any claim."
+                fb_disp = yt_disp
             fallback_disputes.append(DisputeItem(song_title=s.title, youtube_dispute=yt_disp, facebook_dispute=fb_disp))
 
         ai_draft = GeneratedCloseoutDraft(
@@ -125,21 +138,47 @@ async def generate_closeout_pack(plan: ServicePlan) -> CloseoutPack:
             disputes=fallback_disputes
         )
 
+    # Deterministically enforce compliance on AI draft
+    clean_disputes = []
+    by_title = {d.song_title.strip().lower(): d for d in (ai_draft.disputes or [])}
+    for s in plan.songs:
+        s_title_key = s.title.strip().lower()
+        existing_disp = by_title.get(s_title_key)
+        is_pd = s.verdict and s.verdict.legal_status == LegalStatus.PUBLIC_DOMAIN
+        if is_pd and existing_disp and "do not file" not in existing_disp.youtube_dispute.lower():
+            clean_disputes.append(existing_disp)
+        elif _is_covered(s) and existing_disp and "do not file" not in existing_disp.youtube_dispute.lower():
+            clean_disputes.append(existing_disp)
+        else:
+            status_label = s.verdict.legal_status.value if s.verdict else 'unresearched'
+            safe_yt = f"DO NOT FILE — Selah could not confirm streaming coverage for '{s.title}' (status: {status_label}). Filing a dispute would assert a licence you may not hold. Confirm coverage with your licensing administrator before responding to any claim."
+            clean_disputes.append(DisputeItem(song_title=s.title, youtube_dispute=safe_yt, facebook_dispute=safe_yt))
+    ai_draft.disputes = clean_disputes
+
     # 4. Build YouTube Description
+    description_header = (
+        "Songs broadcast under church worship streaming licensing agreements:"
+        if held_streaming
+        else "Songs performed during church worship service:"
+    )
     description_parts = [
         f"{plan.stream_title}",
         "",
         ai_draft.service_summary,
         "",
         "--- MUSIC COPYRIGHT & LICENSING ATTRIBUTION ---",
-        "Songs broadcast under church worship streaming licensing agreements:",
+        description_header,
     ]
     for attr in attributions:
         description_parts.append(f"• {attr}")
 
+    if plan.licenses_held:
+        description_parts.extend([
+            "",
+            f"Broadcast Licenses Held: {all_licenses_str}"
+        ])
+
     description_parts.extend([
-        "",
-        f"Broadcast Licenses Held: {licenses_str}",
         "",
         "--- TIMESTAMPS / CHAPTERS ---",
         chapters_text,
@@ -156,20 +195,48 @@ async def generate_closeout_pack(plan: ServicePlan) -> CloseoutPack:
     for s in plan.songs:
         ccli_num = s.verdict.ccli_number if s.verdict and s.verdict.ccli_number else "N/A"
         owner = s.verdict.owner if s.verdict and s.verdict.owner else (s.artist_or_source or "Traditional")
-        status_val = s.verdict.legal_status.value if s.verdict else "reported"
-        ccli_log_lines.append(f"| {today_str} | {s.title} | {owner} | {ccli_num} | Streamed Live Performance | {status_val} |")
+        is_pd = s.verdict and s.verdict.legal_status == LegalStatus.PUBLIC_DOMAIN
+        
+        if s.resolution and "mute" in s.resolution.lower():
+            usage_type = "Muted during stream — not broadcast"
+        elif is_pd:
+            usage_type = "Public domain — not reportable under CCLI"
+        else:
+            usage_type = "Streamed Live Performance"
+
+        if s.verdict:
+            status_map = {
+                LegalStatus.COVERED: "Covered by streaming licence",
+                LegalStatus.PUBLIC_DOMAIN: "Public Domain",
+                LegalStatus.NEEDS_LICENSE: "NOT CLEARED — needs licence",
+                LegalStatus.UNKNOWN: "Unverified — manual check"
+            }
+            status_val = status_map.get(s.verdict.legal_status, s.verdict.legal_status.value)
+        else:
+            status_val = "Unresearched"
+
+        ccli_log_lines.append(f"| {today_str} | {s.title} | {owner} | {ccli_num} | {usage_type} | {status_val} |")
 
     ccli_usage_log = "\n".join(ccli_log_lines)
 
-    # 6. Build Multi-Platform Dispute Pack
+    # 6. Build Content ID Dispute Statements
     dispute_parts = [
-        "# Statutory Multi-Platform Dispute Kit",
+        "# Content ID Dispute Statements (draft — review before filing)",
         f"Generated for: {plan.stream_title} ({today_str})",
-        f"Licenses Held: {licenses_str}",
-        "",
-        "If your broadcast receives an automated Content ID mute or claim, copy the relevant statement into the platform dispute portal:",
+        f"Licenses Held: {all_licenses_str}",
         ""
     ]
+
+    if not held_streaming:
+        dispute_parts.extend([
+            "> ⚠️ NOTICE: No streaming license (e.g. CCLI Streaming License) is recorded for this broadcast. Do NOT file dispute claims asserting licensing coverage until verified with your church administrator.",
+            ""
+        ])
+
+    dispute_parts.extend([
+        "If your broadcast receives an automated Content ID mute or claim, copy the relevant statement into the platform dispute portal after reviewing:",
+        ""
+    ])
 
     for item in ai_draft.disputes:
         dispute_parts.append(f"## {item.song_title}")
@@ -222,7 +289,7 @@ def generate_closeout_markdown_document(pack: CloseoutPack, plan: ServicePlan) -
 
 ---
 
-## 4. Multi-Platform Statutory Dispute Statements
+## 4. Content ID Dispute Statements (drafts)
 {pack.dispute_pack}
 
 ---

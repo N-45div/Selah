@@ -143,7 +143,7 @@ export default function LandingPage({ setPlan }) {
             </div>
             <h3 className="act-card-title">Compliance Dossier & Dispute Kit</h3>
             <p className="act-card-desc">
-              Automatically compiles legally mandated CCLI song attributions, 0:00 timestamped YouTube chapters, quarterly audit logs, and statutory DMCA § 512(g) counter-notices.
+              Automatically compiles legally mandated CCLI song attributions, 0:00 timestamped YouTube chapters, quarterly audit logs, and ready-to-paste Content ID dispute drafts.
             </p>
             <ul className="act-feature-list">
               <li><CheckCircle2 size={15} color="var(--green-accent)" /> YouTube Description with CCLI Attributions</li>

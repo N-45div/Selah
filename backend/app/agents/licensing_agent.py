@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 from google.adk import Agent
 from google.adk.runners import InMemoryRunner
 from ..models import SongVerdict, LegalStatus, ContentIdRisk, Source
-from ..services.parallel_client import search_licensing_web, async_research_licensing_deep
+from ..services.parallel_client import search_licensing_web, async_research_licensing_deep, PARALLEL_URLS, _clean_text
 from ..services.gemini_client import generate_structured, next_api_key
 from ..config import GEMINI_MODEL
 
@@ -19,16 +19,35 @@ CRITICAL OPERATIONAL RULES:
 1. NEVER suggest, recommend, or substitute songs. Selah never dictates worship choices. It gives the human operator clear operational choices (e.g., mute livestream audio, verify CCLI Streaming coverage, obtain synchronization license).
 2. For every song, determine:
    - `legal_status`:
-     * 'public_domain': Written before 1929 or authentic historic traditional hymn.
+     * 'public_domain': ONLY when BOTH the underlying composition/text AND the specific arrangement the church will perform are out of copyright. Pre-1930 hymn text set to a modern tune, or with an added modern refrain/bridge, is a copyrighted derivative work under 17 U.S.C. 103 (e.g. 'Amazing Grace (My Chains Are Gone)' CCLI 4768151; 'It Is Well' - Kristene DiMarco, CCLI 7021972; 'Holy Holy Holy (God With Us)' - Matt Maher). If the setlist gives no artist, or you cannot identify WHICH arrangement is being performed, return 'unknown' and include the option 'Confirm with the worship leader which arrangement the team is playing'. Never infer public domain from the title alone.
      * 'covered': Covered by the church's declared licenses (e.g. CCLI Streaming License).
      * 'needs_license': Copyrighted and NOT covered by in-person-only or basic licenses without streaming addon.
-     * 'unknown': Unable to confirm ownership with high confidence.
+     * 'unknown': Unable to confirm ownership or arrangement with high confidence.
    - `ccli_number`: Look up the exact CCLI SongSelect ID (e.g., 3350395 for 'In Christ Alone', 7115744 for 'Way Maker').
-   - `content_id_risk`: 'low' (public domain), 'medium' (covered with attribution required), or 'high' (strictly claimed by major labels like Capitol CMG / Sony / Bethel Music).
-   - `options`: 2-4 concrete actions for the human volunteer (e.g. 'Mute stream audio during song', 'Acquire CCLI Streaming Plus License for multitracks', 'Verify arrangement year').
+   - `content_id_risk`: 'low' (verified-PD arrangement performed live with no commercial master involved; a modern retune of a PD hymn is 'high' regardless of hymn age), 'medium' (covered live congregational performance), or 'high' (strictly claimed by major labels like Capitol CMG / Sony / Bethel Music).
+   - `options`: 2-4 concrete operational actions for the human volunteer (e.g. 'Mute stream audio during song', 'Acquire CCLI Streaming Plus License for multitracks', 'Verify arrangement with worship lead').
    - `sources`: Provide verifiable primary sources (CCLI SongSelect, Hymnary.org, Capitol CMG, Easy Song, etc.) with URL and title.
    - `attribution_line`: A clean, ready-to-paste video description attribution string.
+3. GROUNDING IS MANDATORY. If search_licensing_web returns an 'error' key or an empty 'results' list, you MUST NOT answer from memory: set legal_status='unknown', content_id_risk='high', sources=[], and state in legal_summary that the web verification step failed.
 """
+
+
+def _unverified_verdict(title: str, artist_or_source: str, sources: Optional[List[Source]] = None) -> SongVerdict:
+    return SongVerdict(
+        legal_status=LegalStatus.UNKNOWN,
+        legal_summary=f"Automated rights verification failed or was inconclusive for '{title}'. No reliable research evidence was confirmed. Please verify manually in CCLI SongSelect before broadcast.",
+        content_id_risk=ContentIdRisk.HIGH,
+        content_id_summary="Content ID risk was not assessed or web evidence was insufficient. Treat as high risk until manually confirmed.",
+        owner=artist_or_source or "Unknown",
+        ccli_number=None,
+        options=[
+            "Check CCLI SongSelect manually for license coverage",
+            "Mute livestream audio during this song",
+            "Confirm performance rights coverage with worship leader"
+        ],
+        sources=sources or [],
+        attribution_line=f"{title} - {artist_or_source or 'Traditional'}"
+    )
 
 
 def _clean_json_text(text: str) -> str:
@@ -55,6 +74,8 @@ async def research_song(
     with direct Parallel deep-search fallback for resilience.
     Rotates process-global GOOGLE_API_KEY from project pool before each ADK run.
     """
+    token = PARALLEL_URLS.set(set())
+
     request_prompt = f"""
     Please research the following worship song/hymn:
     - Song Title: "{title}"
@@ -94,13 +115,19 @@ async def research_song(
         try:
             events = await runner.run_debug(request_prompt, quiet=True)
             for event in reversed(events):
-                if hasattr(event, "content") and event.content:
-                    parts = getattr(event.content, "parts", [])
-                    for part in parts:
-                        if hasattr(part, "text") and part.text:
-                            final_text = part.text
-                            break
-                if final_text:
+                if getattr(event, "error_code", None):
+                    print(f"[ADK error event] {event.error_code}: {getattr(event, 'error_message', '')}")
+                    continue
+                if not getattr(event, "is_final_response", lambda: True)():
+                    continue
+                if not (getattr(event, "content", None) and getattr(event.content, "parts", None)):
+                    continue
+                text = "".join(
+                    getattr(p, "text", "") for p in event.content.parts
+                    if getattr(p, "text", None) and not getattr(p, "thought", False)
+                )
+                if text.strip():
+                    final_text = text
                     break
             if final_text:
                 break
@@ -130,11 +157,15 @@ async def research_song(
         print(f"Executing direct Parallel deep search grounding fallback for '{title}'...")
         deep_search = await async_research_licensing_deep(title, artist_or_source, licenses_held)
         search_results = deep_search.get("results", [])
-        
+
+        if not search_results:
+            print(f"Parallel returned no results for '{title}' - returning unverified verdict")
+            return _unverified_verdict(title, artist_or_source)
+
         extracted_sources: List[Source] = []
         ccli_found = None
         for item in search_results[:4]:
-            t = getattr(item, "title", "Citation") or "Citation"
+            t = _clean_text(getattr(item, "title", "Citation") or "Citation")
             u = getattr(item, "url", "") or ""
             if "ccli.com/songs/" in u:
                 m = re.search(r"ccli\.com/songs/(\d+)", u)
@@ -142,61 +173,70 @@ async def research_song(
                     ccli_found = m.group(1)
             extracted_sources.append(Source(url=u, title=t, note="Direct Parallel Web verification"))
 
+        evidence = deep_search.get("evidence", "")
         fallback_prompt = f"""
         Generate a structured SongVerdict for '{title}' by '{artist_or_source}' based on these Parallel search findings:
         - Church Licenses: {json.dumps(licenses_held)}
         - Detected CCLI ID: {ccli_found}
         - Search Citations: {[s.model_dump() for s in extracted_sources]}
+
+        WEB EVIDENCE (authoritative — prefer these facts over anything you recall; if they conflict with your memory, the evidence wins):
+        {evidence if evidence else "(no web evidence retrieved)"}
+
+        If the evidence does not establish the current copyright owner or streaming coverage, return legal_status='unknown' rather than guessing. Never suggest or substitute songs; options must be operational actions only.
         """
         try:
-            return await generate_structured(
+            verdict = await generate_structured(
                 prompt=fallback_prompt,
                 schema=SongVerdict,
                 system_instruction=LICENSING_AGENT_INSTRUCTION
             )
+            verdict.sources = extracted_sources
+            return verdict
         except Exception as deep_err:
             print(f"Deep search structured synthesis notice: {deep_err}")
+            return _unverified_verdict(title, artist_or_source, extracted_sources)
 
     # Attempt to parse ADK JSON
+    if not final_text.strip():
+        return _unverified_verdict(title, artist_or_source)
+
     cleaned = _clean_json_text(final_text)
     try:
         data = json.loads(cleaned)
-        return SongVerdict(**data)
+        verdict = SongVerdict(**data)
     except Exception as parse_err:
         print(f"Direct JSON parse failed for '{title}': {parse_err}. Initiating repair pass...")
+        if not final_text.strip():
+            return _unverified_verdict(title, artist_or_source)
 
         repair_prompt = f"""
         Convert the following research findings into the exact SongVerdict JSON schema.
         Do not invent new facts. Maintain all sources and details accurately:
 
         RAW RESEARCH TEXT:
-        {final_text if final_text else 'No raw text gathered.'}
+        {final_text}
         """
 
         try:
-            repaired = await generate_structured(
+            verdict = await generate_structured(
                 prompt=repair_prompt,
                 schema=SongVerdict,
-                system_instruction="You are a JSON formatting assistant. Convert verbatim into the schema without inventing facts."
+                system_instruction=LICENSING_AGENT_INSTRUCTION + "\n\nYOU ARE NOW IN REFORMATTING MODE. Convert the raw research text verbatim into the SongVerdict schema. Invent no facts. All rules above, especially rule 1 (never suggest, recommend or substitute songs), still apply to every field you emit."
             )
-            return repaired
         except Exception as repair_err:
             print(f"Repair pass notice for '{title}': {repair_err}")
-            return SongVerdict(
-                legal_status=LegalStatus.UNKNOWN,
-                legal_summary=f"Unable to automatically confirm licensing details for '{title}'. Please verify in CCLI SongSelect.",
-                content_id_risk=ContentIdRisk.MEDIUM,
-                content_id_summary="Moderate Content ID risk. If streamed, keep documentation ready for YouTube dispute.",
-                owner=artist_or_source or "Unknown",
-                ccli_number=None,
-                options=[
-                    "Check CCLI SongSelect manually for license coverage",
-                    "Mute livestream audio during this song",
-                    "Confirm performance rights coverage with worship leader"
-                ],
-                sources=[],
-                attribution_line=f"{title} - {artist_or_source or 'Traditional'}"
-            )
+            return _unverified_verdict(title, artist_or_source)
+
+    # Guard and filter verdict sources against actual Parallel URLs if available
+    seen_urls = PARALLEL_URLS.get() or set()
+    if seen_urls and verdict.sources:
+        filtered = [s for s in verdict.sources if s.url in seen_urls]
+        if filtered:
+            verdict.sources = filtered
+
+    return verdict
+
 
 
 async def research_setlist_concurrently(

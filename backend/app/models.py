@@ -19,7 +19,7 @@ class ContentIdRisk(str, Enum):
 class Source(BaseModel):
     url: str
     title: str
-    note: str = Field(description="One line: what this source establishes")
+    note: str = Field(default="", description="One line: what this source establishes")
 
 
 class SongVerdict(BaseModel):
@@ -112,8 +112,9 @@ class PlanCreateRequest(BaseModel):
 
 
 class ResolveRequest(BaseModel):
-    song_index: int
-    resolution: str
+    song_index: int = Field(ge=0)
+    resolution: str = Field(min_length=1, max_length=300)
+
 
 
 class AdvanceRequest(BaseModel):

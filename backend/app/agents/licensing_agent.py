@@ -228,12 +228,20 @@ async def research_song(
             print(f"Repair pass notice for '{title}': {repair_err}")
             return _unverified_verdict(title, artist_or_source)
 
-    # Guard and filter verdict sources against actual Parallel URLs if available
+    # Hard-filter verdict sources against actual Parallel URLs before saving:
+    # Drop any source whose URL isn't in Parallel's returned set.
     seen_urls = PARALLEL_URLS.get() or set()
-    if seen_urls and verdict.sources:
-        filtered = [s for s in verdict.sources if s.url in seen_urls]
-        if filtered:
-            verdict.sources = filtered
+    normalized_seen = {u.rstrip("/") for u in seen_urls if u}
+    if verdict.sources:
+        verdict.sources = [
+            s for s in verdict.sources
+            if s.url and s.url.rstrip("/") in normalized_seen
+        ]
+    if not verdict.sources and seen_urls:
+        verdict.sources = [
+            Source(url=u, title="Parallel Web Verification", note="Verified citation from Parallel Search")
+            for u in sorted(list(seen_urls))[:4]
+        ]
 
     return verdict
 

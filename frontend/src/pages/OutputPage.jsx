@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { isRestricted, visibleLines, songSelectUrl } from '../services/lyricsPolicy';
 
 export default function OutputPage() {
   const [searchParams] = useSearchParams();
@@ -8,6 +9,19 @@ export default function OutputPage() {
   const [currentSlide, setCurrentSlide] = useState(null);
   const [songInfo, setSongInfo] = useState('');
   const [isBlackout, setIsBlackout] = useState(false);
+
+  // Set transparent background on body/html for OBS lower-third
+  useEffect(() => {
+    if (!isLowerThird) return;
+    const prevBody = document.body.style.backgroundColor;
+    const prevHtml = document.documentElement.style.backgroundColor;
+    document.body.style.backgroundColor = 'transparent';
+    document.documentElement.style.backgroundColor = 'transparent';
+    return () => {
+      document.body.style.backgroundColor = prevBody;
+      document.documentElement.style.backgroundColor = prevHtml;
+    };
+  }, [isLowerThird]);
 
   // BroadcastChannel listener
   useEffect(() => {
@@ -22,6 +36,7 @@ export default function OutputPage() {
           setSongInfo(`${event.data.slide.song_title || ''} • ${event.data.slide.label || ''}`);
         }
       };
+      bc.postMessage({ type: 'REQUEST_STATE' });
     } catch (e) {
       console.warn('BroadcastChannel error in OutputPage:', e);
     }
@@ -93,10 +108,16 @@ export default function OutputPage() {
                 textShadow: '0 2px 8px rgba(0,0,0,0.8)',
               }}
             >
-              {currentSlide.lines?.slice(0, 2).map((line, idx) => (
+              {visibleLines(currentSlide).slice(0, 2).map((line, idx) => (
                 <div key={idx}>{line}</div>
               ))}
             </div>
+
+            {isRestricted(currentSlide) && (
+              <div style={{ fontSize: '0.85vw', color: '#a09c94', marginTop: '0.4vw', fontFamily: 'Inter, sans-serif' }}>
+                Licensed lyrics — <a href={songSelectUrl(currentSlide)} target="_blank" rel="noreferrer" style={{ color: '#d4912a', textDecoration: 'underline' }}>CCLI SongSelect</a>
+              </div>
+            )}
 
             {/* Transliteration */}
             {currentSlide.transliteration?.length > 0 && (
@@ -117,6 +138,7 @@ export default function OutputPage() {
       </div>
     );
   }
+
 
   // --- 2. Fullscreen Church Projection Mode ---
   return (
@@ -170,10 +192,17 @@ export default function OutputPage() {
               marginBottom: currentSlide.transliteration?.length > 0 ? '1.5vw' : '0',
             }}
           >
-            {currentSlide.lines?.map((line, idx) => (
+            {visibleLines(currentSlide).map((line, idx) => (
               <div key={idx} style={{ margin: '0.4vw 0' }}>{line}</div>
             ))}
           </div>
+
+          {isRestricted(currentSlide) && (
+            <div style={{ fontSize: '1.2vw', color: '#a09c94', marginTop: '0.8vw', fontFamily: 'Inter, sans-serif' }}>
+              Licensed lyrics — <a href={songSelectUrl(currentSlide)} target="_blank" rel="noreferrer" style={{ color: '#d4912a', textDecoration: 'underline' }}>View in CCLI SongSelect</a>
+            </div>
+          )}
+
 
           {currentSlide.transliteration?.length > 0 && (
             <div

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, Radio, Music, VolumeX, ShieldAlert } from 'lucide-react';
+import { isRestricted, visibleLines, songSelectUrl } from '../services/lyricsPolicy';
 
 export default function StagePage() {
   const [currentSlide, setCurrentSlide] = useState(null);
@@ -33,6 +34,7 @@ export default function StagePage() {
           setSongInfo(`${event.data.slide.song_title || ''} • ${event.data.slide.label || ''}`);
         }
       };
+      bc.postMessage({ type: 'REQUEST_STATE' });
     } catch (e) {
       console.warn('BroadcastChannel error in StagePage:', e);
     }
@@ -41,6 +43,7 @@ export default function StagePage() {
       if (bc) bc.close();
     };
   }, []);
+
 
   if (isBlackout) {
     return (
@@ -132,10 +135,17 @@ export default function StagePage() {
                 textShadow: '0 2px 14px rgba(0,0,0,0.9)',
               }}
             >
-              {currentSlide.lines?.map((line, idx) => (
+              {visibleLines(currentSlide).map((line, idx) => (
                 <div key={idx} style={{ margin: '0.4vw 0' }}>{line}</div>
               ))}
             </div>
+
+            {isRestricted(currentSlide) && (
+              <div style={{ fontSize: '1.2vw', color: '#a09c94', marginTop: '0.8vw', fontFamily: 'Inter, sans-serif' }}>
+                Licensed lyrics — <a href={songSelectUrl(currentSlide)} target="_blank" rel="noreferrer" style={{ color: '#d4912a', textDecoration: 'underline' }}>CCLI SongSelect</a>
+              </div>
+            )}
+
 
             {currentSlide.transliteration?.length > 0 && (
               <div

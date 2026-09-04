@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { 
   Radio, Play, Square, ChevronLeft, ChevronRight, Bookmark, 
   Tv, ExternalLink, Clock, Layers, AlertCircle, CheckCircle, 
   EyeOff, VolumeX, Download, Monitor, Sliders, ShieldAlert 
 } from 'lucide-react';
+import { isRestricted, visibleLines, songSelectUrl } from '../services/lyricsPolicy';
 
 const COMMON_CHAPTERS = [
   'Welcome & Opening Worship',
@@ -16,11 +17,18 @@ const COMMON_CHAPTERS = [
   'Benediction & Closing',
 ];
 
-export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
+export default function ConsolePage({ plan, setPlan, setStreamStatus, isHydrating }) {
   const navigate = useNavigate();
 
   const [currentSlideIndex, setCurrentSlideIndex] = useState(plan?.current_slide_index || 0);
+
+  useEffect(() => {
+    if (plan?.id) {
+      setCurrentSlideIndex(plan.current_slide_index || 0);
+    }
+  }, [plan?.id]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [activeChapterIndex, setActiveChapterIndex] = useState(0);
   const [customChapterLabel, setCustomChapterLabel] = useState('');
   const [isGoingLive, setIsGoingLive] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
@@ -40,6 +48,9 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
             ...slide,
             song_title: song.title,
             song_language: song.language,
+            lyrics_policy: song.lyrics_policy,
+            legal_status: song.verdict?.legal_status,
+            ccli_number: song.verdict?.ccli_number,
             is_blocking:
               (song.verdict?.legal_status === 'needs_license' ||
                 song.verdict?.legal_status === 'unknown') &&
@@ -54,6 +65,9 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
           transliteration: [],
           song_title: song.title,
           song_language: song.language,
+          lyrics_policy: song.lyrics_policy,
+          legal_status: song.verdict?.legal_status,
+          ccli_number: song.verdict?.ccli_number,
           is_blocking: false,
         });
       }
@@ -93,6 +107,26 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
   useEffect(() => {
     syncSlideToOutput(currentSlideIndex);
   }, [currentSlideIndex, syncSlideToOutput]);
+
+  // Handle incoming REQUEST_STATE handshake messages
+  useEffect(() => {
+    if (!broadcastChannel) return;
+    const onMsg = (e) => {
+      if (e.data?.type !== 'REQUEST_STATE') return;
+      syncSlideToOutput(currentSlideIndex);
+      broadcastChannel.postMessage({ type: 'BLACKOUT_TOGGLE', isBlackout });
+      broadcastChannel.postMessage({ type: 'AUDIO_MUTE_TOGGLE', isMuted: isAudioMutedSafe });
+    };
+    broadcastChannel.addEventListener('message', onMsg);
+    return () => broadcastChannel.removeEventListener('message', onMsg);
+  }, [broadcastChannel, currentSlideIndex, syncSlideToOutput, isBlackout, isAudioMutedSafe]);
+
+  // Clean up BroadcastChannel on unmount
+  useEffect(() => {
+    return () => {
+      if (broadcastChannel) broadcastChannel.close();
+    };
+  }, [broadcastChannel]);
 
   // Elapsed timer when live
   useEffect(() => {
@@ -145,8 +179,17 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
 
   // Audio Safe Mute Indicator Toggle
   const toggleAudioSafeMute = useCallback(() => {
-    setIsAudioMutedSafe((prev) => !prev);
-  }, []);
+    setIsAudioMutedSafe((prev) => {
+      const nextVal = !prev;
+      if (broadcastChannel) {
+        broadcastChannel.postMessage({
+          type: 'AUDIO_MUTE_TOGGLE',
+          isMuted: nextVal,
+        });
+      }
+      return nextVal;
+    });
+  }, [broadcastChannel]);
 
   // Keyboard navigation shortcuts & USB Foot Pedal support
   useEffect(() => {
@@ -294,6 +337,30 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
 
   const progressPercent = allSlides.length > 0 ? Math.round(((currentSlideIndex + 1) / allSlides.length) * 100) : 0;
 
+  if (isHydrating) {
+    return (
+      <div className="main-container" style={{ textAlign: 'center', padding: '4rem 1rem' }}>
+        <p style={{ color: 'var(--ink-muted)' }}>Restoring service plan...</p>
+      </div>
+    );
+  }
+
+  if (!plan?.id) {
+    return (
+      <div className="main-container">
+        <div className="card" style={{ padding: '3rem 2rem', textAlign: 'center', maxWidth: '600px', margin: '2rem auto' }}>
+          <h2 className="card-title" style={{ justifyContent: 'center' }}>No Service Plan Loaded</h2>
+          <p className="card-subtitle" style={{ marginBottom: '1.5rem' }}>
+            Start in Act 1 to intake a setlist, run the autonomous licensing guard, and generate slides.
+          </p>
+          <Link to="/prepare" className="btn btn-primary" style={{ display: 'inline-flex' }}>
+            Go to Prepare &amp; License
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="main-container">
       {/* Emergency Control Bar */}
@@ -354,7 +421,7 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
                 type="button"
                 className="btn btn-primary"
                 onClick={handleGoLive}
-                disabled={blockingCount > 0 || isGoingLive}
+                disabled={!plan?.id || blockingCount > 0 || isGoingLive}
               >
                 <Play size={16} />
                 {isGoingLive ? 'Starting...' : 'Go Live Now'}
@@ -538,10 +605,17 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus }) {
             {currentSlide ? (
               <>
                 <div className="slide-main-text">
-                  {currentSlide.lines?.map((line, idx) => (
+                  {visibleLines(currentSlide).map((line, idx) => (
                     <div key={idx}>{line}</div>
                   ))}
                 </div>
+
+                {isRestricted(currentSlide) && (
+                  <div style={{ fontSize: '0.82rem', color: '#a09c94', marginTop: '0.5rem' }}>
+                    Licensed lyrics — <a href={songSelectUrl(currentSlide)} target="_blank" rel="noreferrer" style={{ color: '#d4912a', textDecoration: 'underline' }}>View in CCLI SongSelect</a>
+                  </div>
+                )}
+
 
                 {currentSlide.transliteration?.length > 0 && (
                   <div className="slide-translit-text">

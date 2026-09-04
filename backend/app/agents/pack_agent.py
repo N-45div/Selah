@@ -97,8 +97,16 @@ async def generate_pack_for_setlist(
             for s in pack_res.slides
         ]
 
+        # Enforce server-side lyrics policy clamp for non-PD songs without custom authorized text
+        is_pd = bool(song.verdict and song.verdict.legal_status.value == "public_domain")
+        if not is_pd and not custom_text and pack_res.lyrics_policy != "full":
+            for sl in domain_slides:
+                if sl.lines:
+                    sl.lines = sl.lines[:1]
+
         song.slides = domain_slides
         song.lyrics_policy = pack_res.lyrics_policy
         updated_songs.append(song)
+
 
     return updated_songs

@@ -90,9 +90,11 @@ async def add_chapter(plan_id: str, payload: ChapterRequest):
     if plan.started_at:
         try:
             start_time = datetime.fromisoformat(plan.started_at)
-            seconds_elapsed = max(0, int((datetime.now() - start_time).total_seconds()))
+            now_time = datetime.now(timezone.utc) if start_time.tzinfo else datetime.now()
+            seconds_elapsed = max(0, int((now_time - start_time).total_seconds()))
         except Exception:
             seconds_elapsed = 0
+
 
     if plan.chapters:
         seconds_elapsed = max(seconds_elapsed, plan.chapters[-1].seconds_from_start)

@@ -74,6 +74,12 @@ async def _run_licensing_research_background(plan_id: str):
     # Launch research tasks (serialized cleanly by semaphore)
     await asyncio.gather(*[_research_one(s) for s in plan.songs])
 
+    final_plan = await get_plan(plan_id)
+    if final_plan and final_plan.status == "draft" and not final_plan.blocking_songs:
+        final_plan.status = "ready"
+        await save_plan(final_plan)
+
+
 
 
 @router.post("")
@@ -92,17 +98,41 @@ async def create_plan(
     parsed_licenses = [lic.strip() for lic in licenses_held.split(",") if lic.strip()]
     parsed_languages = [lang.strip() for lang in languages.split(",") if lang.strip()]
 
+    MAX_IMAGE_BYTES = 8 * 1024 * 1024
+    ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
+    MAX_SETLIST_CHARS = 10_000
+
     # Extract songs from image or text
     if image_file and image_file.filename:
+        mime_type = (image_file.content_type or "").lower()
+        if mime_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(status_code=415, detail=f"Unsupported image type '{mime_type}'. Upload a JPEG, PNG, WebP or HEIC photo.")
         image_bytes = await image_file.read()
-        mime_type = image_file.content_type or "image/jpeg"
-        extracted = await parse_setlist_image(image_bytes, mime_type)
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=413, detail="Setlist photo is larger than 8 MB. Please upload a smaller photo.")
+        try:
+            extracted = await parse_setlist_image(image_bytes, mime_type)
+        except GeminiQuotaExhaustedError:
+            raise HTTPException(status_code=503, detail="Gemini quota exhausted — retry after midnight PT, or paste the setlist as text instead.")
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Could not read that setlist photo ({e}). Try a clearer photo, or paste the setlist as text.")
     elif setlist_text and setlist_text.strip():
-        extracted = await parse_setlist_text(setlist_text)
+        if len(setlist_text) > MAX_SETLIST_CHARS:
+            raise HTTPException(status_code=413, detail="Setlist text is too long (max 10,000 characters).")
+        try:
+            extracted = await parse_setlist_text(setlist_text)
+        except GeminiQuotaExhaustedError:
+            raise HTTPException(status_code=503, detail="Gemini quota exhausted — retry after midnight PT, or retry in a few moments.")
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Could not parse setlist ({e}).")
     else:
         raise HTTPException(status_code=400, detail="Please provide setlist text or upload an image.")
 
+    if not extracted or not extracted.songs:
+        raise HTTPException(status_code=422, detail="No songs found in that setlist.")
+
     songs = convert_extracted_to_songs(extracted)
+
     plan_id = str(uuid.uuid4())[:8]
 
     plan = ServicePlan(
@@ -156,16 +186,30 @@ async def resolve_song(plan_id: str, payload: ResolveRequest):
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found.")
 
-    matched = False
-    for song in plan.songs:
-        if song.index == payload.song_index:
-            song.resolution = payload.resolution
-            matched = True
-            break
-
-    if not matched:
+    song = next((s for s in plan.songs if s.index == payload.song_index), None)
+    if song is None:
         raise HTTPException(status_code=400, detail="Song index not found.")
+    if song.research_status in ("pending", "researching"):
+        raise HTTPException(status_code=409, detail="Research is still running for this song; wait for a verdict before resolving.")
+    if song not in plan.blocking_songs:
+        raise HTTPException(status_code=409, detail="This song is not blocking and does not need a resolution.")
 
+    allowed = set(song.verdict.options if song.verdict else []) | {
+        "Mute stream audio for this song",
+        "Confirm licence coverage manually",
+        "Verify arrangement with the worship lead",
+        "Mute livestream audio during this song",
+        "Check CCLI SongSelect manually for license coverage",
+        "Confirm performance rights coverage with worship leader",
+    }
+    res = payload.resolution.strip()
+    if not any(a.lower() in res.lower() or res.lower() in a.lower() for a in allowed) and res not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Resolution must be one of the operational options offered for this song: {sorted(allowed)}"
+        )
+
+    song.resolution = res
     await save_plan(plan)
     return {"success": True, "remaining_blocking": len(plan.blocking_songs)}
 
@@ -225,16 +269,29 @@ async def build_slides(plan_id: str):
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found.")
 
-    updated_songs = await generate_pack_for_setlist(plan.songs)
-    plan.songs = updated_songs
-    await save_plan(plan)
+    async with _RESEARCH_GATE:
+        updated_songs = await generate_pack_for_setlist(plan.songs)
 
-    total_slides = sum(len(s.slides) for s in plan.songs)
+    fresh = await get_plan(plan_id)
+    if not fresh:
+        raise HTTPException(status_code=404, detail="Plan not found.")
+
+    by_index = {s.index: s for s in updated_songs}
+    for s in fresh.songs:
+        u = by_index.get(s.index)
+        if u:
+            s.slides = u.slides
+            s.lyrics_policy = u.lyrics_policy
+
+    await save_plan(fresh)
+
+    total_slides = sum(len(s.slides) for s in fresh.songs)
     return {
         "success": True,
         "total_slides": total_slides,
-        "songs": [s.model_dump() for s in plan.songs]
+        "songs": [s.model_dump() for s in fresh.songs]
     }
+
 
 
 # ---------- Server-Sent Events (SSE) Live Research Telemetry ----------

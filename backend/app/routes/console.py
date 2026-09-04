@@ -9,6 +9,14 @@ from ..agents.closeout_agent import generate_closeout_pack, _format_seconds
 router = APIRouter(prefix="/api/plan", tags=["Console"])
 
 
+_ALLOWED = {"draft": {"live"}, "ready": {"live"}, "live": {"ended"}, "ended": set()}
+
+
+def _require_transition(plan, target: str):
+    if target not in _ALLOWED.get(plan.status, set()):
+        raise HTTPException(status_code=409, detail=f"Cannot move a plan from '{plan.status}' to '{target}'.")
+
+
 @router.post("/{plan_id}/live")
 async def go_live(plan_id: str):
     """
@@ -19,6 +27,8 @@ async def go_live(plan_id: str):
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found.")
 
+    _require_transition(plan, "live")
+
     if plan.blocking_songs:
         blocking_titles = [s.title for s in plan.blocking_songs]
         raise HTTPException(
@@ -28,7 +38,8 @@ async def go_live(plan_id: str):
 
     now = datetime.now()
     plan.status = "live"
-    plan.started_at = now.isoformat()
+    if not plan.started_at:
+        plan.started_at = now.isoformat()
 
     if not plan.chapters:
         plan.chapters.append(
@@ -45,6 +56,7 @@ async def go_live(plan_id: str):
         "status": plan.status,
         "started_at": plan.started_at
     }
+
 
 
 @router.post("/{plan_id}/advance")
@@ -70,6 +82,9 @@ async def add_chapter(plan_id: str, payload: ChapterRequest):
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found.")
 
+    if plan.status != "live":
+        raise HTTPException(status_code=409, detail="Chapters can only be recorded while the stream is live.")
+
     seconds_elapsed = 0
     if plan.started_at:
         try:
@@ -77,6 +92,9 @@ async def add_chapter(plan_id: str, payload: ChapterRequest):
             seconds_elapsed = max(0, int((datetime.now() - start_time).total_seconds()))
         except Exception:
             seconds_elapsed = 0
+
+    if plan.chapters:
+        seconds_elapsed = max(seconds_elapsed, plan.chapters[-1].seconds_from_start)
 
     ts_str = _format_seconds(seconds_elapsed)
     chapter = ChapterMark(
@@ -103,6 +121,8 @@ async def end_stream(plan_id: str):
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found.")
 
+    _require_transition(plan, "ended")
+
     plan.status = "ended"
     plan.ended_at = datetime.now().isoformat()
     await save_plan(plan)
@@ -110,6 +130,7 @@ async def end_stream(plan_id: str):
     # Generate closeout pack with attributions, CCLI log, chapters, and disputes
     closeout = await generate_closeout_pack(plan)
     await save_closeout(closeout)
+
 
     return {
         "success": True,

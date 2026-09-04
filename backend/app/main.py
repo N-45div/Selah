@@ -4,8 +4,9 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from .config import root_dir
+from .config import root_dir, GEMINI_API_KEY, GEMINI_API_KEYS, PARALLEL_API_KEY
 from .routes import plan, console, closeout
+
 
 app = FastAPI(
     title="Selah Telecast Copilot",
@@ -36,14 +37,26 @@ if assets_dir.exists():
 
 
 @app.get("/api/health")
+
 async def health_check():
-    """Health check endpoint for Cloud Run and automated evaluators."""
-    return {
-        "ok": True,
-        "app": "Selah",
-        "version": "1.0.0",
-        "sdk": "google-adk + google-genai + parallel-web"
-    }
+    """Health check and readiness endpoint for Cloud Run and automated evaluators."""
+    pool_keys = [k for k in GEMINI_API_KEYS.split(",") if k.strip()]
+    single_key = [GEMINI_API_KEY] if GEMINI_API_KEY and GEMINI_API_KEY not in pool_keys else []
+    gemini_keys = len(pool_keys) + len(single_key)
+    parallel_ok = bool(PARALLEL_API_KEY)
+    ok = gemini_keys > 0 and parallel_ok
+    return JSONResponse(
+        status_code=200 if ok else 503,
+        content={
+            "ok": ok,
+            "app": "Selah",
+            "version": "1.0.0",
+            "gemini_keys_configured": gemini_keys,
+            "parallel_configured": parallel_ok,
+            "sdk": "google-adk + google-genai + parallel-web"
+        }
+    )
+
 
 
 # Catch-all SPA route — MUST NOT swallow /api/ routes.

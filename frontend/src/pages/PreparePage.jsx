@@ -39,12 +39,27 @@ export default function PreparePage({ plan, setPlan }) {
     }
   };
 
-  // Poll plan status while songs are pending research
+  // Helper to check terminal status
+  const isTerminal = (s) => s.research_status === 'done' || s.research_status === 'error';
+  const statusKey = plan?.songs?.map((s) => s.research_status).join('|') || '';
+
+  const handleManualRefresh = async () => {
+    if (!plan?.id) return;
+    try {
+      const res = await fetch(`/api/plan/${plan.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPlan(data.plan);
+      }
+    } catch (err) {
+      console.error('Manual refresh error:', err);
+    }
+  };
+
+  // Poll plan status until all songs have reached a terminal state
   useEffect(() => {
     if (!plan?.id) return;
-
-    const hasPending = plan.songs?.some((s) => s.research_status === 'pending');
-    if (!hasPending) return;
+    if (plan.songs?.length > 0 && plan.songs.every(isTerminal)) return;
 
     const interval = setInterval(async () => {
       try {
@@ -59,7 +74,7 @@ export default function PreparePage({ plan, setPlan }) {
     }, 1500);
 
     return () => clearInterval(interval);
-  }, [plan?.id, plan?.songs, setPlan]);
+  }, [plan?.id, statusKey, setPlan]);
 
   // Submit Setlist for intake & progressive licensing research
   const handleSubmitSetlist = async (e) => {
@@ -358,7 +373,7 @@ export default function PreparePage({ plan, setPlan }) {
         <div>
           {/* Go Live Guard Alert */}
           {plan?.songs?.length > 0 && (
-            <div className={`guard-banner ${!allResearchDone ? '' : blockingSongs.length === 0 ? 'clean' : ''}`}>
+            <div className={`guard-banner ${!allResearchDone ? '' : blockingSongs.length === 0 ? 'clean' : ''}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
               <div>
                 <strong style={{ display: 'block', fontSize: '0.95rem' }}>
                   {!allResearchDone
@@ -375,6 +390,16 @@ export default function PreparePage({ plan, setPlan }) {
                     : 'Resolve red/unknown songs below before going live to protect against Content ID mutes.'}
                 </span>
               </div>
+              <button
+                type="button"
+                onClick={handleManualRefresh}
+                className="btn btn-outline"
+                style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                title="Force refresh status from server"
+              >
+                <RefreshCw size={13} />
+                Refresh Status
+              </button>
             </div>
           )}
 
@@ -397,10 +422,10 @@ export default function PreparePage({ plan, setPlan }) {
 
             <div className="verdict-list">
               {plan?.songs?.map((song) => {
-                const isPending = song.research_status === 'pending';
+                const isPending = song.research_status === 'pending' || song.research_status === 'researching';
                 const isError = song.research_status === 'error';
                 const v = song.verdict;
-                const status = isError ? 'error' : v?.legal_status || 'unknown';
+                const status = isError ? 'error' : (v?.legal_status || (isPending ? 'researching' : 'unknown'));
 
                 return (
                   <div
@@ -432,9 +457,13 @@ export default function PreparePage({ plan, setPlan }) {
                           <span className="pill pill-amber">
                             <CheckCircle size={12} /> Public Domain
                           </span>
-                        ) : (
+                        ) : v ? (
                           <span className="pill pill-red">
                             <AlertTriangle size={12} /> Needs License
+                          </span>
+                        ) : (
+                          <span className="pill pill-neutral">
+                            Awaiting verdict
                           </span>
                         )}
 

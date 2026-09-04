@@ -28,6 +28,7 @@ class SongVerdict(BaseModel):
     content_id_risk: ContentIdRisk
     content_id_summary: str = Field(description="Clear explanation of YouTube Content ID risk and mitigation")
     owner: str = Field(default="", description="Copyright owner or administrator")
+    publication_year: Optional[int] = Field(default=None, description="Original publication year if known / verified (critical for public domain assertions)")
     ccli_number: Optional[str] = Field(default=None, description="CCLI song select number if found")
     options: List[str] = Field(
         default_factory=list,

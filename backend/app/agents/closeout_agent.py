@@ -27,7 +27,7 @@ Your task is to generate post-broadcast compliance documentation across platform
 DISPUTE DRAFTING GUIDELINES:
 1. YouTube Content ID:
    - For copyrighted songs covered by an active streaming licence: Cite the church's streaming licence, registered publisher, CCLI Song ID, and note that the church holds non-commercial live streaming synchronization rights under its licence agreement. Never cite 17 U.S.C. § 106 and never argue fair use under § 107.
-   - For public domain songs: State clearly that the musical composition and lyrics are in the Public Domain (first published 1930 or earlier in the US) and that this live broadcast is an original rendition, not a copyrighted master recording.
+   - For public domain songs: State clearly that the musical composition and lyrics are in the Public Domain (cite publication_year if provided, or first published 1930 or earlier in the US) and that this live broadcast is an original rendition, not a copyrighted master recording.
 2. Facebook / Meta Rights Manager:
    - Provide a concise statement citing the active church streaming licence covering this live telecast.
 3. STRICT COMPLIANCE RULE:
@@ -94,6 +94,7 @@ async def generate_closeout_pack(plan: ServicePlan) -> CloseoutPack:
             "title": s.title,
             "artist": s.artist_or_source,
             "owner": v.owner if v else "Unknown",
+            "publication_year": v.publication_year if v else None,
             "ccli_number": v.ccli_number if v else "N/A",
             "legal_status": v.legal_status.value if v else "unknown",
             "sources": [src.model_dump() for src in (v.sources if v else [])]
@@ -122,8 +123,10 @@ async def generate_closeout_pack(plan: ServicePlan) -> CloseoutPack:
             owner_name = s.verdict.owner if s.verdict and s.verdict.owner else "Copyright Owner"
             is_pd = s.verdict and s.verdict.legal_status == LegalStatus.PUBLIC_DOMAIN
             if is_pd:
-                yt_disp = f"The composition and lyrics of '{s.title}' are in the Public Domain (first published 1930 or earlier in the US). This broadcast is an original live church performance and does not infringe any sound recording copyright."
-                fb_disp = f"Public Domain hymn '{s.title}' performed live by church congregation. No master recording copyright applies."
+                pub_year = s.verdict.publication_year if (s.verdict and s.verdict.publication_year) else None
+                year_clause = f"first published {pub_year} (1930 or earlier)" if pub_year else "first published 1930 or earlier in the US"
+                yt_disp = f"The composition and lyrics of '{s.title}' are in the Public Domain ({year_clause}). This broadcast is an original live church performance and does not infringe any sound recording copyright."
+                fb_disp = f"Public Domain hymn '{s.title}' ({year_clause}) performed live by church congregation. No master recording copyright applies."
             elif _is_covered(s):
                 yt_disp = f"This church holds an active streaming licence ({held_streaming_str}) covering '{s.title}' (CCLI SongSelect #{ccli_id}, Administered by {owner_name}). This is a live performance during a non-commercial religious service."
                 fb_disp = f"Covered under active church streaming licence ({held_streaming_str}) for '{s.title}' (CCLI #{ccli_id})."

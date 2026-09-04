@@ -24,6 +24,7 @@ CRITICAL OPERATIONAL RULES:
      * 'needs_license': Copyrighted and NOT covered by in-person-only or basic licenses without streaming addon.
      * 'unknown': Unable to confirm ownership or arrangement with high confidence.
    - `ccli_number`: Look up the exact CCLI SongSelect ID (e.g., 3350395 for 'In Christ Alone', 7115744 for 'Way Maker').
+   - `publication_year`: Integer original publication year if known/found (e.g. 1873, 1923). Essential for verifying Public Domain status (must be 1930 or earlier).
    - `content_id_risk`: 'low' (verified-PD arrangement performed live with no commercial master involved; a modern retune of a PD hymn is 'high' regardless of hymn age), 'medium' (covered live congregational performance), or 'high' (strictly claimed by major labels like Capitol CMG / Sony / Bethel Music).
    - `options`: 2-4 concrete operational actions for the human volunteer (e.g. 'Mute stream audio during song', 'Acquire CCLI Streaming Plus License for multitracks', 'Verify arrangement with worship lead').
    - `sources`: Provide verifiable primary sources (CCLI SongSelect, Hymnary.org, Capitol CMG, Easy Song, etc.) with URL and title.

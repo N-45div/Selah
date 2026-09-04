@@ -503,6 +503,7 @@ export default function PreparePage({ plan, setPlan }) {
                       <>
                         <div className="verdict-metadata">
                           <span><strong>Owner:</strong> {v.owner || 'Unspecified'}</span>
+                          {v.publication_year && <span><strong>Year:</strong> {v.publication_year}</span>}
                           {v.ccli_number && <span><strong>CCLI #:</strong> {v.ccli_number}</span>}
                           <span><strong>Language:</strong> {song.language}</span>
                         </div>

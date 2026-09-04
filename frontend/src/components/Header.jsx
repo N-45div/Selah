@@ -1,26 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import { Radio, ShieldCheck, Tv, FileText, ExternalLink, Moon, Sun, Monitor, Home, Sparkles } from 'lucide-react';
 
 export default function Header({ currentPlan, streamStatus }) {
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    try {
+      return localStorage.getItem('selah_theme') === 'dark' || document.documentElement.classList.contains('dark-mode') || document.body.classList.contains('dark-mode');
+    } catch {
+      return false;
+    }
+  });
   const location = useLocation();
 
   const isLive = streamStatus === 'live' || (currentPlan && currentPlan.status === 'live');
   const isEnded = streamStatus === 'ended' || (currentPlan && currentPlan.status === 'ended');
 
-  // Toggle Dark Studio Mode
+  // Synchronize dark-mode class on both html and body elements and persist to localStorage
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark-mode');
+      document.body.classList.add('dark-mode');
+      document.documentElement.setAttribute('data-theme', 'dark');
+      try { localStorage.setItem('selah_theme', 'dark'); } catch {}
+    } else {
+      document.documentElement.classList.remove('dark-mode');
+      document.body.classList.remove('dark-mode');
+      document.documentElement.setAttribute('data-theme', 'light');
+      try { localStorage.setItem('selah_theme', 'light'); } catch {}
+    }
+  }, [isDarkMode]);
+
   const toggleTheme = () => {
-    setIsDarkMode((prev) => {
-      const nextVal = !prev;
-      if (nextVal) {
-        document.body.classList.add('dark-mode');
-      } else {
-        document.body.classList.remove('dark-mode');
-      }
-      return nextVal;
-    });
+    setIsDarkMode((prev) => !prev);
   };
+
 
   return (
     <header className="app-header">

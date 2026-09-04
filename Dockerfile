@@ -10,7 +10,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1
-ENV PORT=8000
+
 
 # Install Python dependencies
 COPY backend/requirements.txt ./backend/requirements.txt

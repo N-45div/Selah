@@ -7,6 +7,7 @@
 [![Parallel Track](https://img.shields.io/badge/Partner_Track-Parallel_Search-6366F1)](https://parallel.ai)
 [![Gemini](https://img.shields.io/badge/Model-Gemini_3.7_Flash-8E75B2?logo=google&logoColor=white)](https://ai.google.dev/)
 [![Architecture](https://img.shields.io/badge/Architecture-Mermaid_Spec-10B981)](ARCHITECTURE.md)
+[![Testing Guide](https://img.shields.io/badge/Judge_Testing-TESTING.md-F59E0B)](TESTING.md)
 
 ---
 
@@ -122,6 +123,8 @@ flowchart TD
 | **TC-03** | *"Way Maker"* (Sinach) with CCLI Streaming License | Flagged **GREEN** (Covered). Generates mandatory CCLI SongSelect attribution line for YouTube description. |
 | **TC-04** | *"Enakkai Jeevan Vittavare"* (Tamil Worship) | Flagged **GREEN** with phonetic Latin transliteration generated for all verses and chorus slides. |
 | **TC-05** | *"Way Maker / Great Are You Lord"* (Medley) | Decomposes compound slash setlist line into separate songs and evaluates rights independently. |
+
+> 📋 **Judge & Evaluator Testing Guide**: For the full step-by-step walkthrough, 1-click test presets, API verification commands, and evaluation rubric alignment, see [**`TESTING.md`**](TESTING.md).
 
 ---
 

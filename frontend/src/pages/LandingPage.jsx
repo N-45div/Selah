@@ -28,7 +28,7 @@ export default function LandingPage({ setPlan }) {
         </h1>
 
         <p className="hero-subtitle">
-          Selah is the autonomous live telecast copilot for church media teams. Powered by <strong>Gemini 3.5 Flash</strong> and <strong>Parallel Web Search</strong>, it prevents algorithmic copyright mutes on YouTube, synchronizes 3 broadcast screens in 0ms, and automates Sunday compliance.
+          Selah is the autonomous live telecast copilot for church media teams. Powered by <strong>Gemini 3.7 Flash</strong> and <strong>Parallel Web Search</strong>, it prevents algorithmic copyright mutes on YouTube, synchronizes 3 broadcast screens in 0ms, and automates Sunday compliance.
         </p>
 
         <div className="hero-actions">

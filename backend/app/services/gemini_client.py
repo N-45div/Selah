@@ -73,7 +73,7 @@ async def generate_structured(
     On 429/RESOURCE_EXHAUSTED: rotates to next key immediately (no sleep),
     only backs off once ALL keys have been tried in the current round.
     """
-    target_model = model or GEMINI_MODEL or "gemini-3.5-flash"
+    target_model = model or GEMINI_MODEL or "gemini-3.7-flash"
 
     config = types.GenerateContentConfig(
         response_mime_type="application/json",
@@ -149,7 +149,7 @@ async def generate_text(
     """
     Generate plain text with multi-key pool rotation and immediate key-switch on 429.
     """
-    target_model = model or GEMINI_MODEL or "gemini-3.5-flash"
+    target_model = model or GEMINI_MODEL or "gemini-3.7-flash"
 
     config = types.GenerateContentConfig(
         temperature=temperature,

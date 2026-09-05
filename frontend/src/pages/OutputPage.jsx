@@ -23,12 +23,17 @@ export default function OutputPage() {
     };
   }, [isLowerThird]);
 
-  // BroadcastChannel listener
+  // Dual Sync Engine: 0ms BroadcastChannel (local booth PC) + SSE fallback (network / OBS machines)
   useEffect(() => {
-    let bc;
+    let lastBcMessageTime = 0;
+    let bc = null;
+    let es = null;
+
+    // 1. Primary: 0ms Local BroadcastChannel for same-workstation displays
     try {
       bc = new BroadcastChannel('selah_stream');
       bc.onmessage = (event) => {
+        lastBcMessageTime = Date.now();
         if (event.data?.type === 'BLACKOUT_TOGGLE') {
           setIsBlackout(event.data.isBlackout);
         } else if (event.data?.type === 'SLIDE_CHANGE' && event.data.slide) {
@@ -41,10 +46,49 @@ export default function OutputPage() {
       console.warn('BroadcastChannel error in OutputPage:', e);
     }
 
+    // 2. Secondary: SSE Server Stream for cross-PC LAN / OBS displays
+    const planIdParam = searchParams.get('plan');
+    const setupSseFallback = (targetPlanId) => {
+      if (!targetPlanId) return;
+      try {
+        es = new EventSource(`/api/plan/${targetPlanId}/stream`);
+        es.addEventListener('plan_update', (e) => {
+          // If local BroadcastChannel has recently provided state (< 800ms), let it take 0ms precedence
+          if (Date.now() - lastBcMessageTime < 800) return;
+          try {
+            const data = JSON.parse(e.data);
+            if (data.active_slide) {
+              setCurrentSlide(data.active_slide);
+              setSongInfo(`${data.active_slide.song_title || ''} • ${data.active_slide.label || ''}`);
+            }
+          } catch (err) {
+            console.warn('SSE parse notice in OutputPage:', err);
+          }
+        });
+      } catch (err) {
+        console.warn('EventSource initialization notice in OutputPage:', err);
+      }
+    };
+
+    const resolvedPlanId = planIdParam || localStorage.getItem('selah_current_plan_id');
+    if (resolvedPlanId) {
+      setupSseFallback(resolvedPlanId);
+    } else {
+      fetch('/api/plan/active/latest')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.plan?.id) {
+            setupSseFallback(data.plan.id);
+          }
+        })
+        .catch(() => {});
+    }
+
     return () => {
       if (bc) bc.close();
+      if (es) es.close();
     };
-  }, []);
+  }, [searchParams]);
 
   if (isBlackout) {
     return isLowerThird ? null : (

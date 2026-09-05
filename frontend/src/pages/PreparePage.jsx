@@ -56,24 +56,58 @@ export default function PreparePage({ plan, setPlan }) {
     }
   };
 
-  // Poll plan status until all songs have reached a terminal state
+  // Live SSE Stream with robust polling fallback
   useEffect(() => {
     if (!plan?.id) return;
     if (plan.songs?.length > 0 && plan.songs.every(isTerminal)) return;
 
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/plan/${plan.id}`);
-        if (res.ok) {
-          const data = await res.json();
-          setPlan(data.plan);
+    let pollingInterval = null;
+    const startPolling = () => {
+      if (pollingInterval) return;
+      pollingInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/plan/${plan.id}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.plan) setPlan(data.plan);
+          }
+        } catch (err) {
+          console.error('Polling fallback error:', err);
         }
-      } catch (err) {
-        console.error('Polling error:', err);
-      }
-    }, 1500);
+      }, 1500);
+    };
 
-    return () => clearInterval(interval);
+    let es = null;
+    try {
+      es = new EventSource(`/api/plan/${plan.id}/stream`);
+      es.addEventListener('plan_update', (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload?.plan) {
+            setPlan(payload.plan);
+          }
+        } catch (err) {
+          console.error('SSE JSON parse error:', err);
+        }
+      });
+
+      es.addEventListener('research_complete', () => {
+        if (es) es.close();
+      });
+
+      es.onerror = () => {
+        if (es) es.close();
+        startPolling();
+      };
+    } catch (e) {
+      console.warn('EventSource initialization failed, starting polling fallback:', e);
+      startPolling();
+    }
+
+    return () => {
+      if (es) es.close();
+      if (pollingInterval) clearInterval(pollingInterval);
+    };
   }, [plan?.id, statusKey, setPlan]);
 
   // Submit Setlist for intake & progressive licensing research

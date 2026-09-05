@@ -103,10 +103,23 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus, isHydratin
     [broadcastChannel, allSlides]
   );
 
-  // Sync on index change
+  // Sync on index change to both BroadcastChannel (0ms local) and backend (cross-PC network sync)
   useEffect(() => {
     syncSlideToOutput(currentSlideIndex);
-  }, [currentSlideIndex, syncSlideToOutput]);
+
+    if (plan?.id) {
+      try {
+        localStorage.setItem('selah_current_plan_id', plan.id);
+        fetch(`/api/plan/${plan.id}/advance`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slide_index: currentSlideIndex }),
+        }).catch((err) => console.warn('Backend advance sync notice:', err));
+      } catch (e) {
+        // Ignore localStorage or network offline errors
+      }
+    }
+  }, [currentSlideIndex, syncSlideToOutput, plan?.id]);
 
   // Handle incoming REQUEST_STATE handshake messages
   useEffect(() => {
@@ -448,7 +461,7 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus, isHydratin
             </button>
 
             <a
-              href="/output"
+              href={plan?.id ? `/output?plan=${plan.id}` : "/output"}
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-secondary"
@@ -460,7 +473,7 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus, isHydratin
             </a>
 
             <a
-              href="/output?mode=lower-third"
+              href={plan?.id ? `/output?mode=lower-third&plan=${plan.id}` : "/output?mode=lower-third"}
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-secondary"
@@ -472,7 +485,7 @@ export default function ConsolePage({ plan, setPlan, setStreamStatus, isHydratin
             </a>
 
             <a
-              href="/stage"
+              href={plan?.id ? `/stage?plan=${plan.id}` : "/stage"}
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-secondary"

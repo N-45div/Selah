@@ -159,6 +159,19 @@ async def create_plan(
     }
 
 
+@router.get("/active/latest")
+async def get_latest_plan():
+    """
+    Returns the most recent plan for auto-discovery by remote display screens across the local network.
+    """
+    from ..store import list_plans
+    plans = await list_plans()
+    if not plans:
+        raise HTTPException(status_code=404, detail="No active plans found.")
+    latest = plans[-1]
+    return {"plan": latest}
+
+
 @router.get("/{plan_id}")
 async def get_plan_status(plan_id: str):
     """
@@ -299,40 +312,53 @@ async def build_slides(plan_id: str):
 @router.get("/{plan_id}/stream")
 async def stream_plan_telemetry(plan_id: str):
     """
-    Server-Sent Events (SSE) endpoint for real-time research telemetry.
-    Replaces frontend 1.5s HTTP polling with a persistent event stream that pushes
-    progressive song verdicts, research status changes, and plan readiness events.
+    Server-Sent Events (SSE) endpoint for real-time research telemetry and remote screen sync.
+    Pushes:
+    1. Progressive research status changes and full plan snapshots for PreparePage.
+    2. Active slide, next slide, and slide index for remote /output and /stage screens across LAN.
     """
     async def event_generator():
-        max_ticks = 300  # Safety cap: ~5 minutes max stream
+        max_ticks = 3600  # Up to 1 hour stream session (auto-reconnects on timeout)
         for _ in range(max_ticks):
             plan = await get_plan(plan_id)
             if not plan:
                 yield f"event: error\ndata: {json.dumps({'error': 'Plan not found'})}\n\n"
                 break
 
-            # Build per-song status payload
-            songs_payload = []
+            plan_dict = plan.model_dump()
+
+            # Flatten slides for real-time display consumers (/output and /stage on LAN)
+            all_flattened_slides = []
             for s in plan.songs:
-                song_data = {
-                    "index": s.index,
-                    "title": s.title,
-                    "artist_or_source": s.artist_or_source,
-                    "research_status": s.research_status,
-                    "error_message": s.error_message,
-                    "resolution": s.resolution
-                }
-                if s.verdict:
-                    song_data["verdict"] = {
-                        "legal_status": s.verdict.legal_status.value,
-                        "legal_summary": s.verdict.legal_summary,
-                        "content_id_risk": s.verdict.content_id_risk.value,
-                        "content_id_summary": s.verdict.content_id_summary,
-                        "owner": s.verdict.owner,
-                        "ccli_number": s.verdict.ccli_number,
-                        "sources": [src.model_dump() for src in s.verdict.sources]
-                    }
-                songs_payload.append(song_data)
+                if s.slides:
+                    for sl in s.slides:
+                        all_flattened_slides.append({
+                            "song_index": s.index,
+                            "label": sl.label,
+                            "lines": sl.lines,
+                            "transliteration": sl.transliteration,
+                            "song_title": s.title,
+                            "song_language": s.language,
+                            "lyrics_policy": s.lyrics_policy,
+                            "legal_status": s.verdict.legal_status.value if s.verdict else None,
+                            "ccli_number": s.verdict.ccli_number if s.verdict else None,
+                        })
+                else:
+                    all_flattened_slides.append({
+                        "song_index": s.index,
+                        "label": "Title Slide",
+                        "lines": [s.title, s.artist_or_source or "Worship"],
+                        "transliteration": [],
+                        "song_title": s.title,
+                        "song_language": s.language,
+                        "lyrics_policy": s.lyrics_policy,
+                        "legal_status": s.verdict.legal_status.value if s.verdict else None,
+                        "ccli_number": s.verdict.ccli_number if s.verdict else None,
+                    })
+
+            cur_idx = plan.current_slide_index
+            active_slide = all_flattened_slides[cur_idx] if 0 <= cur_idx < len(all_flattened_slides) else None
+            next_slide = all_flattened_slides[cur_idx + 1] if 0 <= cur_idx + 1 < len(all_flattened_slides) else None
 
             blocking_indices = [s.index for s in plan.blocking_songs]
             all_done = all(s.research_status in ("done", "error") for s in plan.songs)
@@ -341,18 +367,25 @@ async def stream_plan_telemetry(plan_id: str):
             data_payload = {
                 "id": plan.id,
                 "status": plan.status,
-                "songs": songs_payload,
+                "plan": plan_dict,
+                "current_slide_index": plan.current_slide_index,
+                "total_slides": len(all_flattened_slides),
+                "active_slide": active_slide,
+                "next_slide": next_slide,
                 "blocking_count": len(plan.blocking_songs),
                 "blocking_indices": blocking_indices,
-                "is_ready_for_broadcast": is_ready
+                "is_ready_for_broadcast": is_ready,
+                "all_done": all_done
             }
 
             yield f"event: plan_update\ndata: {json.dumps(data_payload)}\n\n"
 
-            # Stream completion: all songs researched and plan is not live
-            if all_done and plan.status != "live":
+            # Stream completion for research intake: emit research_complete once all songs are researched
+            if all_done and plan.status == "draft":
                 yield f"event: research_complete\ndata: {json.dumps({'plan_id': plan.id, 'is_ready': is_ready})}\n\n"
                 break
+
+            await asyncio.sleep(1.0)
 
             await asyncio.sleep(1.0)
 

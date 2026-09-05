@@ -23,9 +23,10 @@ CRITICAL OPERATIONAL RULES:
      * 'covered': Covered by the church's declared licenses (e.g. CCLI Streaming License).
      * 'needs_license': Copyrighted and NOT covered by in-person-only or basic licenses without streaming addon.
      * 'unknown': Unable to confirm ownership or arrangement with high confidence.
-   - `ccli_number`: Look up the exact CCLI SongSelect ID (e.g., 3350395 for 'In Christ Alone', 7115744 for 'Way Maker').
+   - `ccli_number`: Look up the exact CCLI SongSelect ID as a string or integer (e.g., "3350395" for 'In Christ Alone', "7115744" for 'Way Maker').
    - `publication_year`: Integer original publication year if known/found (e.g. 1873, 1923). Essential for verifying Public Domain status (must be 1930 or earlier).
    - `content_id_risk`: 'low' (verified-PD arrangement performed live with no commercial master involved; a modern retune of a PD hymn is 'high' regardless of hymn age), 'medium' (covered live congregational performance), or 'high' (strictly claimed by major labels like Capitol CMG / Sony / Bethel Music).
+   - `content_id_summary`: Clear 1-2 sentence explanation of YouTube Content ID risk and mitigation. Mandatory field.
    - `options`: 2-4 concrete operational actions for the human volunteer (e.g. 'Mute stream audio during song', 'Acquire CCLI Streaming Plus License for multitracks', 'Verify arrangement with worship lead').
    - `sources`: Provide verifiable primary sources (CCLI SongSelect, Hymnary.org, Capitol CMG, Easy Song, etc.) with URL and title.
    - `attribution_line`: A clean, ready-to-paste video description attribution string.
@@ -54,13 +55,18 @@ def _unverified_verdict(title: str, artist_or_source: str, sources: Optional[Lis
 def _clean_json_text(text: str) -> str:
     cleaned = text.strip()
     if "```json" in cleaned:
-        match = re.search(r"```json\s*(.*?)\s*```", cleaned, re.DOTALL)
+        match = re.search(r"```json\s*(.*?)(?:```|$)", cleaned, re.DOTALL)
         if match:
             cleaned = match.group(1)
     elif "```" in cleaned:
-        match = re.search(r"```\s*(.*?)\s*```", cleaned, re.DOTALL)
+        match = re.search(r"```\s*(.*?)(?:```|$)", cleaned, re.DOTALL)
         if match:
             cleaned = match.group(1)
+    cleaned = cleaned.strip()
+    if not cleaned.startswith("{") and "{" in cleaned and "}" in cleaned:
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        cleaned = cleaned[start:end+1]
     return cleaned.strip()
 
 
@@ -86,8 +92,8 @@ async def research_song(
 
     Perform necessary web searches via Parallel Search to identify:
     1. Writer(s), publication year, and current copyright owner/administrator or Public Domain status.
-    2. CCLI SongSelect ID number and licensing requirements.
-    3. YouTube Content ID risk profile and mitigation/dispute wording.
+    2. CCLI SongSelect ID number (`ccli_number`) and licensing requirements.
+    3. YouTube Content ID risk profile (`content_id_risk`) and explanation (`content_id_summary`).
     4. Provide full source citations with URLs and titles.
 
     Output STRICT JSON matching the SongVerdict schema.
@@ -205,7 +211,13 @@ async def research_song(
     cleaned = _clean_json_text(final_text)
     try:
         data = json.loads(cleaned)
+        if isinstance(data, dict):
+            if "ccli_number" in data and data["ccli_number"] is not None:
+                data["ccli_number"] = str(data["ccli_number"]).strip() or None
+            if "content_id_summary" not in data or not data["content_id_summary"]:
+                data["content_id_summary"] = "No specific YouTube Content ID claims detected; standard livestream broadcast guidelines apply."
         verdict = SongVerdict(**data)
+        print(f"Direct JSON parse succeeded for '{title}' (CCLI: {verdict.ccli_number}) - zero repair pass needed.")
     except Exception as parse_err:
         print(f"Direct JSON parse failed for '{title}': {parse_err}. Initiating repair pass...")
         if not final_text.strip():

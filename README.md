@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Google Cloud](https://img.shields.io/badge/Google_Cloud-Agentic_Cinema-4285F4?logo=googlecloud&logoColor=white)](https://agentic-cinema.devpost.com/)
 [![Parallel Track](https://img.shields.io/badge/Partner_Track-Parallel_Search-6366F1)](https://parallel.ai)
-[![Gemini](https://img.shields.io/badge/Model-Gemini_3.5_Flash-8E75B2?logo=google&logoColor=white)](https://ai.google.dev/)
+[![Gemini](https://img.shields.io/badge/Model-Gemini_3.7_Flash-8E75B2?logo=google&logoColor=white)](https://ai.google.dev/)
 [![Architecture](https://img.shields.io/badge/Architecture-Mermaid_Spec-10B981)](ARCHITECTURE.md)
 
 ---
@@ -96,7 +96,7 @@ Selah is built for the **Google Cloud "Agentic Cinema" Hackathon (Parallel Partn
    - [`backend/app/agents/closeout_agent.py`](backend/app/agents/closeout_agent.py) — Multi-platform compliance dossier and Content ID dispute statements.
 3. **Parallel Search SDK (`parallel-web` 1.3.0)**:
    - [`backend/app/services/parallel_client.py`](backend/app/services/parallel_client.py) — Calls `Parallel(api_key).search()` with objective-driven search queries and trimmed citations (~900 chars).
-4. **No Non-Google AI**: 100% powered by Gemini (`gemini-3.5-flash`). Zero OpenAI, Anthropic, or third-party AI audio-fingerprinting dependencies.
+4. **No Non-Google AI**: 100% powered by Gemini (`gemini-3.7-flash`). Zero OpenAI, Anthropic, or third-party AI audio-fingerprinting dependencies.
 
 ---
 
@@ -158,7 +158,7 @@ Selah is built for the **Google Cloud "Agentic Cinema" Hackathon (Parallel Partn
    ```env
    GEMINI_API_KEY=your_gemini_api_key_here
    PARALLEL_API_KEY=your_parallel_api_key_here
-   GEMINI_MODEL=gemini-3.5-flash
+   GEMINI_MODEL=gemini-3.7-flash
    ```
 
 3. **Install Dependencies & Build Frontend**:

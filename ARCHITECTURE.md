@@ -10,7 +10,7 @@
 graph TD
     subgraph "Act 1: Pre-Broadcast Intake & Licensing Guard"
         UI_In["Setlist Intake UI (Image / Text / PCO)"] --> API_Plan["FastAPI /api/plan"]
-        API_Plan --> SetlistAgent["Setlist Parsing Agent (Gemini 3.5 Flash)"]
+        API_Plan --> SetlistAgent["Setlist Parsing Agent (Gemini 3.7 Flash)"]
         SetlistAgent --> LicAgent["Licensing & Musicology Agent (Google ADK + Parallel Search)"]
         LicAgent --> CCLI_DB["Parallel Web Search (CCLI SongSelect & Hymnary)"]
         LicAgent --> GuardVerdict["Progressive Rights Verdict (Green / Yellow / Red)"]
@@ -30,7 +30,7 @@ graph TD
 
     subgraph "Act 3: Post-Broadcast Closeout & Dispute Defense"
         LiveConsole --> CloseoutAPI["FastAPI /api/plan/{id}/end"]
-        CloseoutAPI --> CloseoutAgent["Closeout Agent (Gemini 3.5 Flash)"]
+        CloseoutAPI --> CloseoutAgent["Closeout Agent (Gemini 3.7 Flash)"]
         CloseoutAgent --> YT_Desc["YouTube Description with CCLI Attribution"]
         CloseoutAgent --> Chapters["Timestamped YouTube Chapter Markers"]
         CloseoutAgent --> CCLI_Log["Quarterly CCLI Usage Reporting Log"]
@@ -169,7 +169,7 @@ graph TD
 | :--- | :--- | :--- | :--- |
 | **Frontend** | Live Console & Displays | React 19, Vite, Lucide Icons, BroadcastChannel API | `< 16ms` (60fps render) |
 | **Backend** | REST & Agent Services | Python 3.12, FastAPI, Uvicorn | Sub-millisecond routing |
-| **Agent Core** | Autonomous Agents | `google-adk` 2.7.0, `google-genai` 2.18.1 (`gemini-3.5-flash`) | Parallel multi-key rotation |
+| **Agent Core** | Autonomous Agents | `google-adk` 2.7.0, `google-genai` 2.18.1 (`gemini-3.7-flash`) | Parallel multi-key rotation |
 | **Grounding** | Deep Web Verification | `parallel-web` 1.3.0 (Parallel Search SDK) | `< 800ms` grounded search |
 | **Packaging** | Native Slide Formats | `python-pptx` (16:9 Widescreen), JSON (ProPresenter 7) | Instant client-side download |
 | **Deployment** | Serverless Container | Google Cloud Run, Cloud Build, Artifact Registry | $0.00 idle cost (`min-instances=0`) |

@@ -28,60 +28,48 @@ The agent **never** suggests, recommends, ranks, or substitutes songs. Input is 
 
 Selah is built for the **Google Cloud "Agentic Cinema" Hackathon (Parallel Partner Track)**. All agent orchestration and grounded web research utilize official Google Cloud and Parallel runtime SDKs:
 
-```
-                                  Pastor / Worship Team
-                                            │
-                                (Photo / Text / PCO Plan)
-                                            │
-                                            ▼
-                    ┌──────────────────────────────────────────────┐
-                    │    Act 1: Multimodal Setlist Intake          │
-                    │    [backend/app/agents/setlist_agent.py]     │
-                    │    • Powered by google-genai 2.18.1          │
-                    └──────────────────────┬───────────────────────┘
-                                           │
-                                           ▼
-             ┌─────────────────────────────────────────────────────────────┐
-             │       Autonomous Licensing & Rights Research Agent          │
-             │       [backend/app/agents/licensing_agent.py]               │
-             │       • Orchestrated by google-adk 2.7.0 (InMemoryRunner)   │
-             │       • Grounded verification via Parallel Web Search       │
-             └──────────────────────┬──────────────────────────────┬───────┘
-                                    │                              │
-                     Calls Tool via ADK             2-Axis Copyright &
-                                    │               Content ID Verdicts
-                                    ▼                              │
-     ┌─────────────────────────────────────────────┐               │
-     │      Parallel Search Web API Service        │               │
-     │      [backend/app/services/parallel_client.py│               │
-     │      • Official parallel-web 1.3.0 SDK      │               │
-     └─────────────────────────────────────────────┘               ▼
-                                            ┌──────────────────────────────────────────────┐
-                                            │     Act 1: Slide Pack & Transliteration      │
-                                            │     [backend/app/agents/pack_agent.py]       │
-                                            │     • Strict Public Domain Lyrics Policy     │
-                                            │     • Indic Script Phonetic Transliterations │
-                                            └──────────────────────┬───────────────────────┘
-                                                                   │
-                                                                   ▼
-                                            ┌──────────────────────────────────────────────┐
-                                            │     Act 2: Broadcast Console & OBS Output    │
-                                            │     [frontend/src/pages/ConsolePage.jsx]     │
-                                            │     • Go-Live Guard (Unresolved Song Lock)   │
-                                            │     • BroadcastChannel 0ms Screen Sync       │
-                                            │     • Musician HUD & 16:9 PPTX Exporter      │
-                                            └──────────────────────┬───────────────────────┘
-                                                                   │
-                                                                   ▼
-                                            ┌──────────────────────────────────────────────┐
-                                            │     Act 3: Post-Broadcast Close-Out Pack     │
-                                            │     [backend/app/agents/closeout_agent.py]   │
-                                            │     • YouTube Description + CCLI Log         │
-                                            │     • Multi-Platform Content ID dispute statements │
-                                            └──────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph INTAKE["📥 Pastor & Worship Team Input"]
+        Input["Worship Setlist<br/><i>(Handwritten Photo, Text, or PCO)</i>"]
+    end
+
+    subgraph ACT1["Act 1: Pre-Broadcast Intake & Licensing Guard"]
+        SetlistAgent["<b>Setlist Parsing Agent</b><br/><code>google-genai</code> (Gemini 3.7 Flash)"]
+        LicAgent["<b>Autonomous Licensing Agent</b><br/><code>google-adk</code> (InMemoryRunner)"]
+        ParallelSearch["<b>Parallel Web Search API</b><br/><code>parallel-web</code> (CCLI & Hymnary)"]
+        Verdicts["<b>2-Axis Verdict & Decision Gate</b><br/><i>(Green / Yellow / Red Risk Lock)</i>"]
+        PackAgent["<b>Slide Pack Agent</b><br/><code>google-genai</code> (Lyrics & Transliteration)"]
+    end
+
+    subgraph ACT2["Act 2: Live Telecast Operator Console"]
+        Console["<b>Live Operator Console</b><br/><i>Go-Live Guard & Slide Controls</i>"]
+        SyncEngine["<b>Dual-Sync Engine</b><br/><i>0ms BroadcastChannel + Server SSE</i>"]
+        Projector["<b>Sanctuary Projector</b><br/><code>/output</code> (16:9 Widescreen)"]
+        LowerThird["<b>OBS Lower Third</b><br/><code>/output?mode=lower-third</code>"]
+        StageHUD["<b>Musician Stage HUD</b><br/><code>/stage</code> (Confidence Monitor)"]
+    end
+
+    subgraph ACT3["Act 3: Post-Broadcast Closeout & Defense"]
+        CloseoutAgent["<b>Closeout Agent</b><br/><code>google-genai</code> (Gemini 3.7 Flash)"]
+        Deliverables["<b>Compliance Deliverables</b><br/>• YouTube Description & Chapters<br/>• CCLI Quarterly Audit Log<br/>• Multi-Platform Dispute Kit"]
+    end
+
+    Input --> SetlistAgent
+    SetlistAgent --> LicAgent
+    LicAgent <--> ParallelSearch
+    LicAgent --> Verdicts
+    Verdicts --> PackAgent
+    PackAgent --> Console
+    Console --> SyncEngine
+    SyncEngine --> Projector
+    SyncEngine --> LowerThird
+    SyncEngine --> StageHUD
+    Console --> CloseoutAgent
+    CloseoutAgent --> Deliverables
 ```
 
-> 📄 For full architectural diagrams and sequence flows, see [**`ARCHITECTURE.md`**](ARCHITECTURE.md).
+> 📄 **Complete Technical Specification**: For deep-dive sequence diagrams, fail-safe edge cases, and architectural data models, see [**`ARCHITECTURE.md`**](ARCHITECTURE.md).
 
 ---
 
